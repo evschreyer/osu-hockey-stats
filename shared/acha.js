@@ -105,7 +105,9 @@
       const main = document.querySelector('main') || document.body;
       const pad = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
       const h = Math.ceil(main.offsetTop + main.offsetHeight + pad);
-      if (h && h !== last) { last = h; window.parent.postMessage({ type: 'osu-stats-height', height: h }, '*'); }
+      // Skip readings taken before the page has laid out (e.g. a hidden or not-yet-painted box) so it never collapses
+      if (main.offsetHeight < 80) return;
+      if (h !== last) { last = h; window.parent.postMessage({ type: 'osu-stats-height', height: h }, '*'); }
     };
     const ro = new ResizeObserver(send);
     ro.observe(document.body);

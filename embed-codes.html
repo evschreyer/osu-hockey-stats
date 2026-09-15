@@ -40,11 +40,12 @@
 <main class="widget">
   <header class="head">
     <div class="eyebrow">Website team tool · not for the public site</div>
-    <h1>Player embed codes</h1>
-    <p>Every player on the current ACHA roster gets a ready-to-paste code. The list reads the live roster, so new players show up here automatically.</p>
+    <h1>Embed codes</h1>
+    <p>Ready-to-paste GoDaddy codes for the schedule, the whole roster, and every player on the current ACHA roster. The player list reads the live roster, so new players show up here automatically.</p>
     <ol class="steps">
       <li><b>Host the <code>osu-hockey-stats</code> folder</b> (GitHub Pages or Cloudflare Pages) and paste its address below.</li>
       <li><b>In GoDaddy</b>, open a player's profile page → Add Section → HTML → paste that player's code.</li>
+      <li><b>For the schedule page</b>, paste the schedule code. Tapping a game opens its preview, live score or box score inside the same box.</li>
       <li><b>For a team page</b>, paste the whole-roster code instead. Tapping a player opens their stats inside the same box.</li>
     </ol>
   </header>
@@ -76,7 +77,19 @@
       <input type="number" id="h-roster" value="2300" min="400" step="50">
       <span class="hint">Used only if GoDaddy blocks the resize script.</span>
     </label>
+    <label class="field" for="h-schedule">Schedule box starting height (px)
+      <input type="number" id="h-schedule" value="3300" min="400" step="50">
+      <span class="hint">Used only if GoDaddy blocks the resize script.</span>
+    </label>
   </form>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>Schedule &amp; results</h2>
+      <span><a class="btn" id="schedule-preview" href="schedule.html" target="_blank" rel="noopener">Preview</a> <button type="button" class="btn" id="copy-schedule">Copy</button></span>
+    </div>
+    <code class="snippet" id="schedule-code"></code>
+  </section>
 
   <section class="block">
     <div class="block-head">
@@ -102,7 +115,7 @@
 (() => {
   const { feed, sections, esc, shortSeason, POSITIONS } = ACHA;
   const $ = id => document.getElementById(id);
-  const FIELDS = ['host', 'theme', 'bg', 'h-player', 'h-roster'];
+  const FIELDS = ['host', 'theme', 'bg', 'h-player', 'h-roster', 'h-schedule'];
   const STORE = 'osuEmbedSettings';
   let players = [];
 
@@ -114,7 +127,7 @@
   const settings = () => {
     let host = $('host').value.trim();
     if (host && !host.endsWith('/')) host += '/';
-    return { host, theme: $('theme').value, bg: $('bg').value, hPlayer: +$('h-player').value || 1100, hRoster: +$('h-roster').value || 2300 };
+    return { host, theme: $('theme').value, bg: $('bg').value, hPlayer: +$('h-player').value || 1100, hRoster: +$('h-roster').value || 2300, hSchedule: +$('h-schedule').value || 3300 };
   };
   const query = (s, extra) => {
     const q = new URLSearchParams(extra);
@@ -134,6 +147,8 @@
     try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(FIELDS.map(f => [f, $(f).value])))); } catch (_) {}
     $('roster-code').textContent = iframe(`${s.host}roster.html${query(s, {})}`, 'Oklahoma State Cowboys roster stats', s.hRoster, s.host);
     $('roster-preview').href = 'roster.html' + query(s, {});
+    $('schedule-code').textContent = iframe(`${s.host}schedule.html${query(s, {})}`, 'Oklahoma State Cowboys schedule and results', s.hSchedule, s.host);
+    $('schedule-preview').href = 'schedule.html' + query(s, {});
     if (!players.length) return;
     $('players').innerHTML = `<table>
       <thead><tr><th class="l" scope="col">#</th><th class="l" scope="col">Player</th><th class="l" scope="col">ACHA ID</th><th class="l" scope="col">Embed code</th><th scope="col"><span hidden>Actions</span></th></tr></thead>
@@ -163,6 +178,7 @@
 
   $('settings').addEventListener('input', render);
   $('copy-roster').addEventListener('click', e => copy($('roster-code').textContent, e.currentTarget));
+  $('copy-schedule').addEventListener('click', e => copy($('schedule-code').textContent, e.currentTarget));
   $('copy-all').addEventListener('click', e => {
     const s = settings();
     copy(players.map(p => `#${p.number} ${p.name}\n${playerCode(s, p)}`).join('\n\n'), e.currentTarget);
