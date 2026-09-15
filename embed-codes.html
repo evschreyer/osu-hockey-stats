@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <!--
   OSU Hockey — embed code helper (for the website team, not for the public site)
   Loads the live ACHA roster and writes a GoDaddy HTML-section code for every player.
@@ -67,11 +68,13 @@
         <option value="transparent">Transparent (GoDaddy section shows)</option>
       </select>
     </label>
-    <label class="field" for="h-player">Player box height (px)
-      <input type="number" id="h-player" value="1300" min="400" step="50">
+    <label class="field" for="h-player">Player box starting height (px)
+      <input type="number" id="h-player" value="1100" min="400" step="50">
+      <span class="hint">The box resizes itself to fit once the stats load.</span>
     </label>
-    <label class="field" for="h-roster">Roster box height (px)
-      <input type="number" id="h-roster" value="2000" min="400" step="50">
+    <label class="field" for="h-roster">Roster box starting height (px)
+      <input type="number" id="h-roster" value="2300" min="400" step="50">
+      <span class="hint">Used only if GoDaddy blocks the resize script.</span>
     </label>
   </form>
 
@@ -111,7 +114,7 @@
   const settings = () => {
     let host = $('host').value.trim();
     if (host && !host.endsWith('/')) host += '/';
-    return { host, theme: $('theme').value, bg: $('bg').value, hPlayer: +$('h-player').value || 1300, hRoster: +$('h-roster').value || 2000 };
+    return { host, theme: $('theme').value, bg: $('bg').value, hPlayer: +$('h-player').value || 1100, hRoster: +$('h-roster').value || 2300 };
   };
   const query = (s, extra) => {
     const q = new URLSearchParams(extra);
@@ -120,13 +123,16 @@
     const str = q.toString();
     return str ? '?' + str : '';
   };
-  const iframe = (src, title, h) => `<iframe src="${src}" title="${title}" style="width:100%;height:${h}px;border:0" loading="lazy"></iframe>`;
-  const playerCode = (s, p) => iframe(`${s.host}player.html${query(s, { player: p.id })}`, `${p.name} stats`, s.hPlayer);
+  const originOf = host => { try { return new URL(host).origin; } catch (_) { return ''; } };
+  // The script resizes the box to fit the stats page on any screen, and scrolls to its top when a roster card opens a player
+  const iframe = (src, title, h, host) => `<iframe data-osu-stats src="${src}" title="${title.replace(/"/g, '&quot;')}" style="width:100%;height:${h}px;border:0;display:block" loading="lazy"></iframe>
+<script>addEventListener("message",function(e){if(e.origin!=="${originOf(host)}"||!e.data)return;document.querySelectorAll("iframe[data-osu-stats]").forEach(function(f){if(f.contentWindow!==e.source)return;if(e.data.type==="osu-stats-height")f.style.height=e.data.height+"px";if(e.data.type==="osu-stats-top")f.scrollIntoView({block:"start"});});});<\/script>`;
+  const playerCode = (s, p) => iframe(`${s.host}player.html${query(s, { player: p.id })}`, `${p.name} stats`, s.hPlayer, s.host);
 
   function render() {
     const s = settings();
     try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(FIELDS.map(f => [f, $(f).value])))); } catch (_) {}
-    $('roster-code').textContent = iframe(`${s.host}roster.html${query(s, {})}`, 'Oklahoma State Cowboys roster stats', s.hRoster);
+    $('roster-code').textContent = iframe(`${s.host}roster.html${query(s, {})}`, 'Oklahoma State Cowboys roster stats', s.hRoster, s.host);
     $('roster-preview').href = 'roster.html' + query(s, {});
     if (!players.length) return;
     $('players').innerHTML = `<table>

@@ -47,8 +47,8 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortTeam = n => String(n || '').replace(/^[MW]D\d\s+/, '').replace(/^University of\s+/, '').replace(/\s+University$/, '').trim();
   const shortSeason = n => String(n || '')
-    .replace(/(Men's|Women's)\s+Divisions?\b/, '').replace(/(Men's|Women's)\s+/, '')
-    .replace(/Division\s+(\d)/, 'D$1').replace(/^(\d{4})-\d{2}(\d{2})/, '$1–$2').replace(/\s+/g, ' ').trim();
+    .replace(/(Men's|Women's)\s+Divisions\b/, '').replace(/(Men's|Women's)\s+/, '')
+    .replace(/Division\s+(\d)/, 'D$1').replace(/^(\d{4})-(?:\d{2})?(\d{2})\b/, '$1–$2').replace(/\s+/g, ' ').trim();
   const fmtDate = iso => { const [, m, d] = String(iso).split('-'); return m ? `${MONTHS[+m - 1]} ${+d}` : esc(iso); };
   const fmtHeight = h => String(h || '').replace(/^(\d+)[-'](\d+)"?$/, `$1′$2″`);
   const label = key => LABELS[key] || null;
@@ -96,6 +96,24 @@
   }
 
   const headshot = id => `https://assets.leaguestat.com/acha/240x240/${encodeURIComponent(id)}.jpg`;
+
+  // When embedded, tell the GoDaddy embed code how tall this page is so the box fits it on any screen
+  if (window.parent !== window) {
+    let last = 0;
+    // Measure the content itself (not the body, which can stretch to fill the box and never shrink)
+    const send = () => {
+      const main = document.querySelector('main') || document.body;
+      const pad = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+      const h = Math.ceil(main.offsetTop + main.offsetHeight + pad);
+      if (h && h !== last) { last = h; window.parent.postMessage({ type: 'osu-stats-height', height: h }, '*'); }
+    };
+    const ro = new ResizeObserver(send);
+    ro.observe(document.body);
+    if (document.querySelector('main')) ro.observe(document.querySelector('main'));
+    addEventListener('load', send);
+    addEventListener('resize', send);   // phone rotation / window resize
+    setInterval(send, 1500);            // backup in case a resize notification is missed
+  }
 
   window.ACHA = {
     TEAM_ID, TEAM_NICKNAME, SITE, MONTHS, POSITIONS, LABELS,
