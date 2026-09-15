@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<!--
+  OSU Hockey — game center (mockup): pregame matchup, live scoring, final box score
+
+  URL options
+    game     ACHA game id (required)
+    from     schedule — shows a "Full schedule" link back to schedule.html
+    theme, accent, bg, team — same as the other pages
+-->
+<title>Cowboys Game Center</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  :root { --band: #121416; --band-2: rgba(255, 255, 255, .08); --band-ink: #FFFFFF; --band-muted: #A3ACB4; --opp: #9AA3AB; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --band: #1A1E22; --band-2: rgba(255, 255, 255, .06); --band-ink: #ECEFF1; --band-muted: #9AA3AB; --opp: #5E676F; }
+  }
+  :root[data-theme="dark"] { --band: #1A1E22; --band-2: rgba(255, 255, 255, .06); --band-ink: #ECEFF1; --band-muted: #9AA3AB; --opp: #5E676F; }
+
+  .back { justify-self: start; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--ink); }
+
+  /* ---------- Matchup band ---------- */
+  .hero { background: var(--band); color: var(--band-ink); border-top: 6px solid var(--accent); padding: 16px 24px 18px; display: grid; gap: 16px; }
+  .hero-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 16px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--band-muted); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 4px; font: 800 13px/1 var(--font-display); letter-spacing: .12em; background: var(--band-2); color: var(--band-ink); border-radius: var(--radius); }
+  .pill.live { background: #C8261B; color: #fff; }
+  .pill.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+  .pill.final { background: var(--band-ink); color: var(--band); }
+  @media (prefers-reduced-motion: no-preference) { .pill.live::before { animation: pulse 1.4s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  .teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px 16px; }
+  .team { display: grid; justify-items: center; text-align: center; gap: 6px; min-width: 0; }
+  .disc { width: 92px; height: 92px; border-radius: 50%; background: #fff; display: grid; place-items: center; padding: 11px; }
+  .disc img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .team .nm { font: 800 clamp(22px, 3.8vw, 36px)/1 var(--font-display); text-transform: uppercase; text-wrap: balance; }
+  .team.osu .nm { color: var(--accent); }
+  .team .sub { font-size: 13px; color: var(--band-muted); font-variant-numeric: tabular-nums; }
+  .center { display: grid; justify-items: center; gap: 8px; text-align: center; min-width: 0; }
+  .score { display: flex; align-items: center; gap: 16px; font: 800 clamp(60px, 12vw, 112px)/.85 var(--font-display); font-variant-numeric: tabular-nums; }
+  .score .dash { font-size: .45em; font-weight: 500; color: var(--band-muted); }
+  .score .trail { color: var(--band-muted); }
+  .when { font: 800 clamp(28px, 5vw, 46px)/1 var(--font-display); text-transform: uppercase; }
+  .center .sub { font-size: 14px; color: var(--band-muted); }
+  .countdown { display: flex; gap: 6px; }
+  .countdown span { display: grid; justify-items: center; gap: 4px; min-width: 58px; padding: 9px 6px 7px; background: var(--band-2); }
+  .countdown b { font: 700 30px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .countdown small { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--band-muted); }
+  .hero-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; font-size: 13px; color: var(--band-muted); border-top: 1px solid var(--band-2); padding-top: 12px; }
+  .hero-foot b { color: var(--band-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Sections ---------- */
+  #sections { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  #sections > *, .hero, .teams > * { min-width: 0; }
+  td.muted { color: var(--muted); }
+  .card { background: var(--surface); }
+  .sec-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+  .sec-head .note { font-size: 12px; color: var(--muted); }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two > * + * { border-left: 1px solid var(--line); }
+  .team-label { display: flex; align-items: center; gap: 10px; font: 800 19px/1 var(--font-display); text-transform: uppercase; letter-spacing: .02em; }
+  .team-label img { width: 28px; height: 28px; object-fit: contain; }
+  .team-label.osu { color: var(--accent-ink); }
+
+  /* comparison bars */
+  .legend { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px 0; }
+  .cmp-list { display: grid; gap: 16px; padding: 14px 16px 18px; }
+  .cmp { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 4.2em; align-items: center; gap: 5px 12px; }
+  .cmp .lbl { grid-column: 1 / -1; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .cmp .v { font: 700 22px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--muted); }
+  .cmp .v.best { color: var(--ink); }
+  .cmp .v.r { text-align: right; }
+  .cmp .bar { display: flex; gap: 3px; height: 10px; }
+  .cmp .bar i { display: block; min-width: 4px; background: var(--opp); }
+  .cmp .bar i.osu { background: var(--accent); }
+  .recs th, .recs td { text-align: center; }
+  .recs td:first-child, .recs th:first-child { text-align: left; }
+  .recs td:last-child, .recs th:last-child { text-align: right; }
+  .recs td.lbl { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+
+  /* head to head */
+  .series { padding: 18px 16px 6px; font: 700 clamp(22px, 3.6vw, 32px)/1.1 var(--font-display); text-transform: uppercase; text-wrap: balance; }
+  .series b { color: var(--accent-ink); font-weight: 800; }
+  .h2h { margin: 12px 16px 4px; }
+  .meeting { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+  a.meeting:hover { background: var(--hover); }
+  .meeting time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+  /* leaders */
+  .col { padding: 14px 16px 18px; display: grid; gap: 12px; align-content: start; }
+  .cat { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+  .leader { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; align-items: center; color: inherit; text-decoration: none; }
+  a.leader:hover b { text-decoration: underline; text-underline-offset: 3px; }
+  .face { width: 48px; height: 48px; background: var(--hover); overflow: hidden; border-bottom: 3px solid var(--line); }
+  .osu-col .face { border-bottom-color: var(--accent); }
+  .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .who { min-width: 0; }
+  .who b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { color: var(--muted); font-size: 12px; }
+  .big { text-align: right; font: 700 28px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .big small { display: block; font: 600 10px/1.6 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .osu-col .big.key { color: var(--accent-ink); }
+  .note-inline { font-size: 12px; color: var(--muted); margin: -4px 0 0; }
+
+  /* scoring summary */
+  .period-h { padding: 10px 16px 8px; font: 700 14px/1 var(--font-display); text-transform: uppercase; letter-spacing: .1em; background: var(--hover); border-top: 1px solid var(--line); }
+  .goal { display: grid; grid-template-columns: 3.2em 30px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .goal time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .goal img { width: 30px; height: 30px; object-fit: contain; }
+  .goal .who small { display: block; }
+  .tag { display: inline-block; margin-left: 6px; padding: 3px 5px 2px; font: 800 11px/1 var(--font-display); letter-spacing: .06em; border: 1px solid var(--line); color: var(--muted); vertical-align: 2px; }
+  .run { font: 700 20px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .none { padding: 10px 16px; color: var(--muted); border-top: 1px solid var(--line); font-size: 14px; }
+  details.pens summary { cursor: pointer; padding: 12px 16px; font: 700 15px/1 var(--font-display); text-transform: uppercase; letter-spacing: .08em; border-top: 1px solid var(--line); }
+  details.pens summary:hover { color: var(--accent-ink); }
+
+  /* form */
+  .form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); color: inherit; text-decoration: none; font-size: 14px; }
+  .form-row:first-of-type { border-top: 0; }
+  a.form-row:hover { color: var(--accent-ink); }
+  .team-tabs { display: flex; gap: 4px; padding-inline: 8px; border-bottom: 1px solid var(--line); }
+
+  @media (max-width: 640px) {
+    .hero { padding: 14px 14px 16px; }
+    .disc { width: 60px; height: 60px; padding: 7px; }
+    .team .nm { font-size: 20px; overflow-wrap: anywhere; }
+    .score { gap: 10px; }
+    .countdown span { min-width: 46px; }
+    .countdown b { font-size: 24px; }
+    .two { grid-template-columns: minmax(0, 1fr); }
+    .two > * + * { border-left: 0; border-top: 1px solid var(--line); }
+    .meeting { grid-template-columns: 5.5em minmax(0, 1fr) auto; }
+  }
+</style>
+
+<main class="widget" aria-live="polite">
+  <a class="back" id="back" href="schedule.html" hidden>← Full schedule</a>
+  <section class="hero" id="hero"><div class="hero-top"><span>Game center</span><span class="pill">Loading</span></div><div class="center"><span class="when">Loading game…</span></div></section>
+  <div id="sections"></div>
+  <footer>
+    <span id="status"><span class="live-dot stale"></span>Connecting to ACHA stats…</span>
+    <span><a id="acha-link" href="https://www.achahockey.org/stats/" target="_blank" rel="noopener">View on ACHA</a> &nbsp; <button type="button" class="btn" id="refresh">Refresh</button></span>
+  </footer>
+</main>
+
+<script src="shared/acha.js"></script>
+<script>
+(() => {
+  const { feed, sections, esc, shortTeam, shortSeason, fmtStat, SITE, POSITIONS } = ACHA;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  ACHA.applyView(params);
+
+  const GAME = params.get('game') || '33725';
+  const TEAM = String(params.get('team') || ACHA.TEAM_ID);
+  if (params.get('from') === 'schedule') {
+    $('back').href = 'schedule.html' + ACHA.carry(params, { season: params.get('season') });
+    $('back').hidden = false;
+    if (window.parent !== window) window.parent.postMessage({ type: 'osu-stats-top' }, '*');
+  }
+  $('acha-link').href = `${SITE}/game-center/${encodeURIComponent(GAME)}`;
+
+  const num = v => (v === null || v === undefined || v === '' || isNaN(+v)) ? 0 : +v;
+  const truthy = v => v === true || v === 1 || v === '1' || v === 'True' || v === 'true';
+  const logoOf = t => t?.logo || (t?.id ? `https://assets.leaguestat.com/acha/logos/${t.id}.png` : '');
+  const personName = p => `${p?.firstName || ''} ${p?.lastName || ''}`.trim();
+  const rec = r => r ? `${num(r.wins)}–${num(r.losses)}–${num(r.OTLosses) + num(r.SOLosses)}` : '–';
+  const streakOf = s => { const [w, l, o, so] = String(s || '').split('-').map(Number); return w ? 'W' + w : l ? 'L' + l : o ? 'OTL' + o : so ? 'SOL' + so : '–'; };
+  const toSec = t => { const [m, s] = String(t || '0:0').split(':').map(Number); return (m || 0) * 60 + (s || 0); };
+  const shortDate = iso => { const d = new Date(String(iso).length <= 10 ? iso + 'T12:00:00' : iso); return isNaN(d) ? esc(iso) : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); };
+  const gameLink = id => 'game.html' + ACHA.carry(params, { game: id, from: params.get('from'), season: params.get('season') });
+  const img = (src, alt = '') => src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" onerror="this.style.visibility='hidden'">` : '';
+
+  let S = { summary: null, preview: null, leaders: {}, loadedAt: null, skTeam: null };
+  let loadToken = 0, pollTimer = null, countdownTimer = null;
+
+  // ---------- Data ----------
+  function teams() {
+    const h = S.summary?.homeTeam?.info || S.preview?.homeTeam?.teamInfo || {};
+    const v = S.summary?.visitingTeam?.info || S.preview?.visitingTeam?.teamInfo || {};
+    return { home: { ...h, id: String(h.id ?? '') }, away: { ...v, id: String(v.id ?? '') } };
+  }
+  function stateOf() {
+    const d = S.summary?.details || {};
+    if (truthy(d.final)) return 'final';
+    if (truthy(d.started)) return 'live';
+    return 'pre';
+  }
+
+  async function load(initial) {
+    const token = ++loadToken;
+    ACHA.setStatus($('status'), 'loading', S.loadedAt);
+    try {
+      const [summary, preview] = await Promise.all([
+        feed({ view: 'gameSummary', game_id: GAME }).catch(() => null),
+        initial || !S.preview ? feed({ view: 'gameCenterPreview', game_id: GAME }).catch(() => null) : Promise.resolve(S.preview),
+      ]);
+      if (token !== loadToken) return;
+      if (!summary?.details && !preview?.homeTeam) throw new Error(`The ACHA has no game with id ${GAME}.`);
+      S.summary = summary; S.preview = preview;
+      if (initial) await loadLeaders();
+      if (token !== loadToken) return;
+      S.loadedAt = new Date();
+      render();
+      ACHA.setStatus($('status'), 'ok', S.loadedAt);
+    } catch (err) {
+      if (token !== loadToken) return;
+      ACHA.setStatus($('status'), 'error', S.loadedAt, err.message);
+      if (!S.loadedAt) $('hero').innerHTML = `<div class="hero-top"><span>Game center</span></div><div class="center"><span class="when">Game not found</span><span class="sub">${esc(err.message)}</span></div>`;
+    }
+    schedulePoll();
+  }
+
+  // Live games refresh every 30 seconds; games about to start every minute
+  function schedulePoll() {
+    clearTimeout(pollTimer);
+    const state = stateOf();
+    if (state === 'final' && S.loadedAt) return;
+    const iso = S.summary?.details?.GameDateISO8601;
+    const untilStart = iso ? new Date(iso) - Date.now() : Infinity;
+    const wait = state === 'live' ? 30e3 : untilStart < 30 * 60e3 ? 60e3 : 10 * 60e3;
+    pollTimer = setTimeout(() => load(false), wait);
+  }
+
+  let bootPromise = null;
+  async function loadLeaders() {
+    const { home, away } = teams();
+    const sid = String(S.summary?.details?.seasonId || '');
+    if (!sid) return;
+    const rowsOf = x => (sections(x)[0]?.data || []).map(r => r.row).filter(r => r.player_id);
+    const pull = async (teamId, season) => {
+      const base = { view: 'players', season, division: '-1', team: teamId, rookies: '0', statsType: 'standard', rosterstatus: 'undefined', first: '0', limit: '60' };
+      const [sk, go] = await Promise.all([
+        feed({ ...base, position: 'skaters', sort: 'points' }),
+        feed({ ...base, position: 'goalies', sort: 'gaa', qualified: 'all' }),
+      ]);
+      return { season, skaters: rowsOf(sk), goalies: rowsOf(go) };
+    };
+    const forTeam = async teamId => {
+      let res = await pull(teamId, sid);
+      if (!res.skaters.some(r => num(r.games_played) > 0)) {
+        // No games yet this season: fall back to the team's previous regular season
+        bootPromise = bootPromise || feed({ view: 'bootstrap', season: 'latest', pageName: 'scorebar' });
+        const boot = await bootPromise;
+        const all = boot.seasons || [];
+        const cur = all.find(s => String(s.id) === sid);
+        const regular = all.filter(s => /^\d{4}-\d{2,4}\s/.test(s.name) && /Men's/.test(s.name) === /Men's/.test(cur?.name || "Men's"));
+        const i = regular.findIndex(s => String(s.id) === sid);
+        const prev = i >= 0 ? regular[i + 1] : null;
+        if (prev) {
+          const p = await pull(teamId, String(prev.id));
+          if (p.skaters.some(r => num(r.games_played) > 0)) res = { ...p, fallback: shortSeason(prev.name), current: shortSeason(cur?.name) };
+        }
+      }
+      return res;
+    };
+    try {
+      const [a, h] = await Promise.all([forTeam(away.id), forTeam(home.id)]);
+      S.leaders = { [away.id]: a, [home.id]: h };
+    } catch (_) { S.leaders = {}; }
+  }
+
+  // ---------- Render ----------
+  function render() {
+    const state = stateOf();
+    const { home, away } = teams();
+    document.title = `${shortTeam(away.name)} at ${shortTeam(home.name)} · Cowboys Game Center`;
+    if (!S.skTeam) S.skTeam = home.id === TEAM ? home.id : away.id;
+    renderHero(state, home, away);
+    const order = {
+      pre: [leadersBlock, h2hBlock, tapeBlock, formBlock],
+      live: [scoringBlock, boxBlock, teamStatsBlock, goaliesBlock, skatersBlock, h2hBlock],
+      final: [boxBlock, scoringBlock, teamStatsBlock, goaliesBlock, skatersBlock, h2hBlock, leadersBlock],
+    }[state];
+    $('sections').innerHTML = order.map(fn => fn(state, home, away)).filter(Boolean).join('');
+  }
+
+  function renderHero(state, home, away) {
+    const d = S.summary?.details || {};
+    const iso = d.GameDateISO8601;
+    const date = iso ? new Date(iso) : null;
+    const periods = S.summary?.periods || [];
+    const shootout = truthy(S.summary?.hasShootout);
+    const extra = shootout ? 'SO' : periods.length > 3 ? 'OT' : '';
+    const hs = num(S.summary?.homeTeam?.stats?.goals), as = num(S.summary?.visitingTeam?.stats?.goals);
+
+    const recordFor = side => {
+      const p = S.preview?.[side === 'home' ? 'homeTeam' : 'visitingTeam']?.teamRecord;
+      const s = S.summary?.[side === 'home' ? 'homeTeam' : 'visitingTeam']?.seasonStats?.teamRecord;
+      const r = state === 'pre' ? (p?.overall || s) : (s || p?.overall);
+      return r ? rec(r) : '';
+    };
+    const teamHtml = (t, side) => `<div class="team${t.id === TEAM ? ' osu' : ''}">
+        <span class="disc">${img(logoOf(t), shortTeam(t.name))}</span>
+        <span class="nm">${esc(shortTeam(t.name))}</span>
+        <span class="sub">${esc(t.nickname || '')}${recordFor(side) ? ' · ' + esc(recordFor(side)) : ''}</span>
+      </div>`;
+
+    let center, pill;
+    if (state === 'pre') {
+      pill = `<span class="pill">Pregame</span>`;
+      center = `<span class="when">${date ? esc(date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })) : esc(d.date || '')}</span>
+        <span class="sub">${date ? esc(date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })) : ''}</span>
+        <div class="countdown" id="countdown"></div>`;
+    } else {
+      const done = state === 'final';
+      pill = done ? `<span class="pill final">Final${extra ? '/' + extra : ''}</span>` : `<span class="pill live">Live</span>`;
+      center = `<div class="score"><span class="${done && as < hs ? 'trail' : ''}">${as}</span><span class="dash">–</span><span class="${done && hs < as ? 'trail' : ''}">${hs}</span></div>
+        <span class="sub">${done ? (extra ? `Final · ${extra === 'OT' ? 'Overtime' : 'Shootout'}` : 'Final') : esc(d.status || 'In progress')}</span>`;
+    }
+    const foot = [];
+    if (d.venue) foot.push(`<span>${esc(d.venue)}</span>`);
+    if (state !== 'pre') {
+      foot.push(`<span>Shots <b>${num(S.summary.visitingTeam.stats.shots)}–${num(S.summary.homeTeam.stats.shots)}</b></span>`);
+      if (num(d.attendance)) foot.push(`<span>Attendance <b>${num(d.attendance).toLocaleString()}</b></span>`);
+    }
+    $('hero').innerHTML = `<div class="hero-top"><span>${esc(shortTeam(away.name))} at ${esc(shortTeam(home.name))}${d.date && state !== 'pre' ? ' · ' + esc(d.date) : ''}</span>${pill}</div>
+      <div class="teams">${teamHtml(away, 'away')}<div class="center">${center}</div>${teamHtml(home, 'home')}</div>
+      ${foot.length ? `<div class="hero-foot">${foot.join('')}</div>` : ''}`;
+
+    clearInterval(countdownTimer);
+    if (state === 'pre' && date) {
+      const draw = () => {
+        const el = $('countdown');
+        if (!el) return;
+        const ms = date - Date.now();
+        if (ms <= 0) { el.innerHTML = `<span><b>Soon</b><small>Puck drop</small></span>`; return; }
+        const dd = Math.floor(ms / 864e5), hh = Math.floor(ms % 864e5 / 36e5), mm = Math.floor(ms % 36e5 / 6e4);
+        el.innerHTML = [[dd, 'Days'], [hh, 'Hrs'], [mm, 'Min']].map(([v, l]) => `<span><b>${v}</b><small>${l}</small></span>`).join('');
+      };
+      draw();
+      countdownTimer = setInterval(draw, 30e3);
+    }
+  }
+
+  const head = (title, note) => `<div class="sec-head"><h2>${title}</h2>${note ? `<span class="note">${note}</span>` : ''}</div>`;
+  const label = t => `<span class="team-label${t.id === TEAM ? ' osu' : ''}">${img(logoOf(t))}${esc(shortTeam(t.name))}</span>`;
+
+  function cmp(lbl, a, h, away, home, opt = {}) {
+    const A = num(a), H = num(h), tot = A + H;
+    const bestA = tot > 0 && (opt.lower ? A < H : A > H), bestH = tot > 0 && (opt.lower ? H < A : H > A);
+    return `<div class="cmp"><span class="lbl">${lbl}</span>
+      <span class="v${bestA ? ' best' : ''}">${opt.aText ?? esc(a)}</span>
+      <div class="bar" aria-hidden="true"><i class="${away.id === TEAM ? 'osu' : ''}" style="flex:${tot ? A : 1}"></i><i class="${home.id === TEAM ? 'osu' : ''}" style="flex:${tot ? H : 1}"></i></div>
+      <span class="v r${bestH ? ' best' : ''}">${opt.hText ?? esc(h)}</span></div>`;
+  }
+
+  // Box score: goals and shots by period
+  function boxBlock(state, home, away) {
+    const periods = S.summary?.periods || [];
+    if (!periods.length) return '';
+    const stats = side => S.summary[side === 'home' ? 'homeTeam' : 'visitingTeam'].stats;
+    const shotsBy = (p, side) => num(p.stats[side + 'Shots']);
+    return `<section class="card">${head('Box score', state === 'live' ? 'Updates every 30 seconds' : 'Goals by period · shots on goal')}<div class="scroll"><table>
+        <thead><tr><th class="l" scope="col">Team</th>${periods.map(p => `<th scope="col">${esc(p.info.longName)}</th>`).join('')}<th scope="col"><abbr title="Total goals">T</abbr></th><th scope="col"><abbr title="Shots on goal">SOG</abbr></th></tr></thead>
+        <tbody>${[['visiting', away], ['home', home]].map(([side, t]) => `<tr><td class="l">${label(t)}</td>${periods.map(p => `<td title="${shotsBy(p, side)} shots">${num(p.stats[side + 'Goals'])}</td>`).join('')}<td class="key">${num(stats(side).goals)}</td><td>${num(stats(side).shots)}</td></tr>`).join('')}</tbody>
+      </table></div></section>`;
+  }
+
+  function scoringBlock(state, home, away) {
+    const periods = S.summary?.periods || [];
+    if (!periods.length) return state === 'live' ? `<section class="card">${head('Scoring summary')}<p class="empty">Waiting for the first goal.</p></section>` : '';
+    let a = 0, h = 0, pens = 0;
+    const body = periods.map(p => {
+      const goals = (p.goals || []).slice().sort((x, y) => toSec(x.time) - toSec(y.time));
+      const rows = goals.map(g => {
+        String(g.team?.id) === home.id ? h++ : a++;
+        const pr = g.properties || {};
+        const tags = [truthy(pr.isPowerPlay) && 'PP', truthy(pr.isShortHanded) && 'SH', truthy(pr.isEmptyNet) && 'EN', truthy(pr.isPenaltyShot) && 'PS', truthy(pr.isGameWinningGoal) && 'GWG'].filter(Boolean);
+        const assists = (g.assists || []).map(x => esc(personName(x))).join(', ');
+        return `<div class="goal"><time>${esc(g.time)}</time>${img(logoOf(g.team), shortTeam(g.team?.name))}
+          <div class="who"><b>${esc(personName(g.scoredBy))} (${esc(g.scorerGoalNumber)})${tags.map(t => `<span class="tag">${t}</span>`).join('')}</b><small>${assists ? 'Assists: ' + assists : 'Unassisted'}</small></div>
+          <span class="run" title="${esc(shortTeam(away.name))}–${esc(shortTeam(home.name))}">${a}–${h}</span></div>`;
+      }).join('');
+      pens += (p.penalties || []).length;
+      const name = /^\d/.test(p.info.longName) ? `${p.info.longName} period` : p.info.longName;
+      return `<div class="period-h">${esc(name)}</div>${rows || '<div class="none">No scoring</div>'}`;
+    }).join('');
+    const penRows = periods.flatMap(p => (p.penalties || []).map(x => `<tr><td class="l">${esc(p.info.longName)}</td><td class="l">${esc(x.time)}</td><td class="l">${esc(shortTeam(x.againstTeam?.name) || x.againstTeam?.abbreviation || '')}</td><td class="l">${esc(personName(x.takenBy))}</td><td class="l">${esc(x.description)}</td><td>${num(x.minutes)}</td></tr>`)).join('');
+    return `<section class="card">${head('Scoring summary', `${esc(shortTeam(away.name))}–${esc(shortTeam(home.name))} running score`)}${body}
+      ${pens ? `<details class="pens"><summary>Penalties (${pens})</summary><div class="scroll"><table><thead><tr><th class="l">Per</th><th class="l">Time</th><th class="l">Team</th><th class="l">Player</th><th class="l">Infraction</th><th>Min</th></tr></thead><tbody>${penRows}</tbody></table></div></details>` : ''}</section>`;
+  }
+
+  function teamStatsBlock(state, home, away) {
+    if (!S.summary) return '';
+    const A = S.summary.visitingTeam.stats, H = S.summary.homeTeam.stats;
+    const rows = [
+      cmp('Shots on goal', A.shots, H.shots, away, home),
+      cmp('Power-play goals', A.powerPlayGoals, H.powerPlayGoals, away, home, { aText: `${num(A.powerPlayGoals)}/${num(A.powerPlayOpportunities)}`, hText: `${num(H.powerPlayGoals)}/${num(H.powerPlayOpportunities)}` }),
+      cmp('Penalty minutes', A.penaltyMinuteCount, H.penaltyMinuteCount, away, home, { lower: true }),
+    ];
+    if (num(A.faceoffAttempts) + num(H.faceoffAttempts) > 0) rows.push(cmp('Faceoffs won', A.faceoffWins, H.faceoffWins, away, home));
+    return `<section class="card">${head('Team stats')}<div class="legend">${label(away)}${label(home)}</div><div class="cmp-list">${rows.join('')}</div></section>`;
+  }
+
+  function goaliesBlock(state, home, away) {
+    if (!S.summary) return '';
+    const log = [...(S.summary.visitingTeam.goalieLog || []), ...(S.summary.homeTeam.goalieLog || [])];
+    const rows = [['visitingTeam', away, 'homeTeam'], ['homeTeam', home, 'visitingTeam']].flatMap(([k, t, oppK]) => {
+      const played = (S.summary[k].goalies || []).filter(g => num(g.stats.shotsAgainst) > 0 || (g.stats.timeOnIce && g.stats.timeOnIce !== '0:00'));
+      const out = played.map(g => {
+        const sa = num(g.stats.shotsAgainst), sv = num(g.stats.saves);
+        const dec = log.find(l => String(l.info.id) === String(g.info.id) && l.result)?.result || '';
+        return `<tr><td class="l">${label(t)}</td><td class="l"><b>${esc(personName(g.info))}</b></td><td>${esc(g.stats.timeOnIce || '')}</td><td>${sa}</td><td>${num(g.stats.goalsAgainst)}</td><td>${sv}</td><td class="key">${sa ? fmtStat('svpct', sv / sa) : '–'}</td><td>${esc(dec)}</td></tr>`;
+      });
+      // Goals scored with the goalie pulled aren't charged to any goalie (the ACHA doesn't always tag them EN)
+      const charged = played.reduce((s, g) => s + num(g.stats.goalsAgainst), 0);
+      const against = num(S.summary[oppK].stats.goals);
+      if (played.length && against > charged && !truthy(S.summary.hasShootout)) {
+        out.push(`<tr><td class="l">${label(t)}</td><td class="l muted">Empty net</td><td></td><td></td><td>${against - charged}</td><td></td><td></td><td></td></tr>`);
+      }
+      return out;
+    });
+    if (!rows.length) return '';
+    return `<section class="card">${head('Goaltending')}<div class="scroll"><table><thead><tr><th class="l">Team</th><th class="l">Goalie</th><th><abbr title="Time on ice">TOI</abbr></th><th><abbr title="Shots against">SA</abbr></th><th><abbr title="Goals against">GA</abbr></th><th><abbr title="Saves">SV</abbr></th><th><abbr title="Save percentage">SV%</abbr></th><th><abbr title="Decision">DEC</abbr></th></tr></thead><tbody>${rows.join('')}</tbody></table></div></section>`;
+  }
+
+  function skatersBlock(state, home, away) {
+    if (!S.summary) return '';
+    const t = S.skTeam === home.id ? home : away;
+    const list = (S.summary[t === home ? 'homeTeam' : 'visitingTeam'].skaters || []).slice()
+      .sort((x, y) => num(y.stats.points) - num(x.stats.points) || num(y.stats.goals) - num(x.stats.goals) || num(x.info.jerseyNumber) - num(y.info.jerseyNumber));
+    const link = p => t.id === TEAM ? `<a href="player.html${esc(ACHA.carry(params, { player: p.info.id }))}">${esc(personName(p.info))}</a>` : esc(personName(p.info));
+    const sum = k => list.reduce((s, p) => s + num(p.stats[k]), 0);
+    return `<section class="card">${head('Skaters')}
+      <div class="team-tabs" role="tablist">${[away, home].map(x => `<button class="tab" role="tab" data-sk="${esc(x.id)}" aria-selected="${x.id === t.id}">${esc(shortTeam(x.name))}</button>`).join('')}</div>
+      <div class="scroll"><table><thead><tr><th class="l">#</th><th class="l">Player</th><th class="l">Pos</th><th><abbr title="Goals">G</abbr></th><th><abbr title="Assists">A</abbr></th><th><abbr title="Points">PTS</abbr></th><th><abbr title="Penalty minutes">PIM</abbr></th></tr></thead>
+      <tbody>${list.map(p => `<tr><td class="l">${esc(p.info.jerseyNumber)}</td><td class="l">${link(p)}</td><td class="l">${esc(p.info.position || '')}</td><td>${num(p.stats.goals)}</td><td>${num(p.stats.assists)}</td><td class="key">${num(p.stats.points)}</td><td>${num(p.stats.penaltyMinutes)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td class="l" colspan="3">${list.length} skaters</td><td>${sum('goals')}</td><td>${sum('assists')}</td><td class="key">${sum('points')}</td><td>${sum('penaltyMinutes')}</td></tr></tfoot></table></div></section>`;
+  }
+
+  function leadersBlock(state, home, away) {
+    const col = t => {
+      const L = S.leaders[t.id];
+      const osu = t.id === TEAM;
+      if (!L) return `<div class="col">${label(t)}<p class="note-inline">Stat leaders are unavailable right now.</p></div>`;
+      const played = L.skaters.filter(r => num(r.games_played) > 0);
+      if (!played.length) return `<div class="col">${label(t)}<p class="note-inline">No games played yet.</p></div>`;
+      const pts = played.slice().sort((x, y) => num(y.points) - num(x.points) || num(y.goals) - num(x.goals)).slice(0, 3);
+      const goals = played.slice().sort((x, y) => num(y.goals) - num(x.goals) || num(y.points) - num(x.points))[0];
+      const goalie = L.goalies.filter(r => num(r.games_played) > 0).sort((x, y) => num(y.games_played) - num(x.games_played))[0];
+      const wrap = (r, inner) => osu
+        ? `<a class="leader" href="player.html${esc(ACHA.carry(params, { player: r.player_id }))}">${inner}</a>`
+        : `<div class="leader">${inner}</div>`;
+      const face = r => `<span class="face"><img src="${ACHA.headshot(r.player_id)}" alt="" loading="lazy" onerror="this.remove()"></span>`;
+      const meta = (r, extra) => `<small>${r.jersey_number ? '#' + esc(r.jersey_number) + ' · ' : ''}${esc(POSITIONS[r.position] || r.position || '')}${extra ? ' · ' + extra : ''}</small>`;
+      return `<div class="col${osu ? ' osu-col' : ''}">${label(t)}
+        ${L.fallback ? `<p class="note-inline">No ${esc(L.current || 'this season')} games yet — ${esc(L.fallback)} leaders</p>` : ''}
+        <div class="cat">Points</div>
+        ${pts.map((r, i) => wrap(r, `${face(r)}<span class="who"><b>${esc(r.name)}</b>${meta(r, `${num(r.goals)} G · ${num(r.assists)} A`)}</span><span class="big${i === 0 ? ' key' : ''}">${num(r.points)}<small>PTS</small></span>`)).join('')}
+        <div class="cat">Goals</div>
+        ${wrap(goals, `${face(goals)}<span class="who"><b>${esc(goals.name)}</b>${meta(goals, `${num(goals.games_played)} GP`)}</span><span class="big">${num(goals.goals)}<small>G</small></span>`)}
+        ${goalie ? `<div class="cat">Goaltending</div>${wrap(goalie, `${face(goalie)}<span class="who"><b>${esc(goalie.name)}</b><small>${num(goalie.games_played)} GP · ${esc(goalie.goals_against_average)} GAA · ${num(goalie.wins)}–${num(goalie.losses)}</small></span><span class="big">${fmtStat('save_percentage', goalie.save_percentage)}<small>SV%</small></span>`)}` : ''}
+      </div>`;
+    };
+    return `<section class="card">${head(state === 'final' ? 'Season stat leaders' : 'Stat leaders', 'Updated from ACHA stats')}<div class="two">${col(away)}${col(home)}</div></section>`;
+  }
+
+  function h2hBlock(state, home, away) {
+    const H = S.preview?.headToHeadRecords;
+    if (!H) return '';
+    const osuHome = home.id === TEAM;
+    const us = osuHome ? home : away, them = osuHome ? away : home;
+    const r = H[osuHome ? 'homeTeam' : 'visitingTeam'] || {};
+    const five = r.previousFiveYears || {};
+    const w = num(five.wins), l = num(five.losses) + num(five.OTLosses) + num(five.SOLosses);
+    const usName = us.nickname || shortTeam(us.name), themName = them.nickname || shortTeam(them.name);
+    const line = w + l === 0 ? `First meeting with ${esc(shortTeam(them.name))} in at least five seasons`
+      : w > l ? `<b>${esc(usName)}</b> lead the series ${w}–${l}`
+      : l > w ? `${esc(themName)} lead the series ${l}–${w}` : `Series tied ${w}–${l}`;
+    const cells = [['This season', r.currentYear], ['Last season', r.previousYear], ['Last 5 seasons', r.previousFiveYears]];
+    const meetings = (S.preview.previousMeetings || []).filter(m => String(m.gameId) !== String(GAME))
+      .sort((x, y) => String(y.datePlayed).localeCompare(String(x.datePlayed)));
+    const mRows = meetings.map(m => {
+      const usHome = String(m.homeTeamId) === String(us.id);
+      const u = num(usHome ? m.homeScore : m.visitingScore), o = num(usHome ? m.visitingScore : m.homeScore);
+      const fin = /final/i.test(m.status || 'Final');
+      const res = fin ? `<span class="result ${u > o ? 'w' : 'l'}"><i>${u > o ? 'W' : 'L'}</i>${u}–${o}</span>` : `<span class="note">${esc(m.status)}</span>`;
+      return `<a class="meeting" href="${esc(gameLink(m.gameId))}"><time>${shortDate(m.datePlayed)}</time><span>${usHome ? 'vs' : '@'} ${esc(shortTeam(them.name))}</span>${res}</a>`;
+    }).join('');
+    return `<section class="card">${head('Head to head', `From ${esc(shortTeam(us.name))}'s side · last five seasons`)}
+      <div class="series">${line}</div>
+      <div class="statline h2h">${cells.map(([k, v], i) => `<div class="stat${i === 2 ? ' key' : ''}"><span class="fig">${esc(rec(v))}</span><span class="lbl">${k}</span></div>`).join('')}</div>
+      <div class="cat" style="padding:14px 16px 8px">Recent meetings</div>
+      ${mRows || '<div class="none">No meetings on record in the ACHA database.</div>'}
+    </section>`;
+  }
+
+  function tapeBlock(state, home, away) {
+    const P = S.preview;
+    if (!P?.homeTeam || !P?.visitingTeam) return '';
+    const A = P.visitingTeam, H = P.homeTeam;
+    const per = (t, k) => num(t.gamesPlayed) ? (num(t[k]) / num(t.gamesPlayed)).toFixed(2) : '–';
+    const pct = v => num(v) ? `${num(v).toFixed(1)}%` : '–';
+    const bars = [
+      cmp('Goals per game', per(A, 'goalsFor'), per(H, 'goalsFor'), away, home),
+      cmp('Goals against per game', per(A, 'goalsAgainst'), per(H, 'goalsAgainst'), away, home, { lower: true }),
+      cmp('Power play', A.powerPlayStats?.overall?.percentage, H.powerPlayStats?.overall?.percentage, away, home, { aText: pct(A.powerPlayStats?.overall?.percentage), hText: pct(H.powerPlayStats?.overall?.percentage) }),
+      cmp('Penalty kill', A.penaltyKillStats?.overall?.percentage, H.penaltyKillStats?.overall?.percentage, away, home, { aText: pct(A.penaltyKillStats?.overall?.percentage), hText: pct(H.penaltyKillStats?.overall?.percentage) }),
+      cmp('Penalty minutes per game', A.penaltyMinutesPerGame, H.penaltyMinutesPerGame, away, home, { lower: true }),
+    ].join('');
+    const recRow = (lbl, a, h) => `<tr><td>${a}</td><td class="lbl">${lbl}</td><td>${h}</td></tr>`;
+    const noGames = !num(A.gamesPlayed) && !num(H.gamesPlayed);
+    return `<section class="card">${head('Tale of the tape', 'Season to date, entering this game')}
+      <div class="legend">${label(away)}${label(home)}</div>
+      ${noGames ? '<p class="empty">Neither team has played yet this season.</p>' : `<div class="cmp-list">${bars}</div>`}
+      <div class="scroll"><table class="recs"><tbody>
+        ${recRow('Record', esc(rec(A.teamRecord?.overall)), esc(rec(H.teamRecord?.overall)))}
+        ${recRow('Road / Home', esc(rec(A.teamRecord?.visiting)), esc(rec(H.teamRecord?.home)))}
+        ${recRow('Last 10', esc(rec(A.teamRecord?.past_10_games)), esc(rec(H.teamRecord?.past_10_games)))}
+        ${recRow('Streak', esc(streakOf(A.teamRecord?.streak)), esc(streakOf(H.teamRecord?.streak)))}
+      </tbody></table></div>
+    </section>`;
+  }
+
+  function formBlock(state, home, away) {
+    const P = S.preview;
+    if (!P) return '';
+    const col = (t, games) => {
+      const rows = (games || []).slice().sort((x, y) => String(y.date_played).localeCompare(String(x.date_played))).slice(0, 5).map(g => {
+        const isHome = String(g.home_team) === t.id;
+        const u = num(isHome ? g.home_goal_count : g.visiting_goal_count), o = num(isHome ? g.visiting_goal_count : g.home_goal_count);
+        const won = String(g.winner) === t.id;
+        return `<a class="form-row" href="${esc(gameLink(g.id))}"><span>${shortDate(g.date_played)} · ${isHome ? 'vs' : '@'} ${esc(shortTeam(isHome ? g.visitingCity : g.homeCity))}</span><span class="result ${won ? 'w' : 'l'}"><i>${won ? 'W' : 'L'}</i>${u}–${o}</span></a>`;
+      }).join('');
+      return `<div class="col${t.id === TEAM ? ' osu-col' : ''}">${label(t)}<div>${rows || '<p class="note-inline">No games played yet this season.</p>'}</div></div>`;
+    };
+    return `<section class="card">${head('Recent form', 'Last five games')}<div class="two">${col(away, P.visitingTeam?.previousGames)}${col(home, P.homeTeam?.previousGames)}</div></section>`;
+  }
+
+  // ---------- Events ----------
+  $('sections').addEventListener('click', e => {
+    const b = e.target.closest('[data-sk]');
+    if (!b) return;
+    S.skTeam = b.dataset.sk;
+    render();
+  });
+  $('refresh').addEventListener('click', () => load(false));
+  load(true);
+})();
+</script>

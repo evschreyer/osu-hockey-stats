@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<!--
+  OSU Hockey — live schedule & results (mockup)
+
+  GoDaddy embed: generate from embed-codes.html once approved, or use
+    <iframe data-osu-stats src="https://YOUR-HOST/schedule.html?theme=light" ...>
+
+  URL options
+    season   ACHA season id (omit to follow the current season)
+    show     all | upcoming | results — which filter opens first
+    theme, accent, bg, team — same as the other pages
+-->
+<title>Cowboys Schedule</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  :root { --band: #121416; --band-2: rgba(255, 255, 255, .08); --band-ink: #FFFFFF; --band-muted: #A3ACB4; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --band: #1A1E22; --band-2: rgba(255, 255, 255, .06); --band-ink: #ECEFF1; --band-muted: #9AA3AB; }
+  }
+  :root[data-theme="dark"] { --band: #1A1E22; --band-2: rgba(255, 255, 255, .06); --band-ink: #ECEFF1; --band-muted: #9AA3AB; }
+
+  .team-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; background: var(--surface); border-top: 6px solid var(--ink); padding: 20px 24px; }
+  .team-head img { width: 72px; height: 72px; object-fit: contain; flex: none; }
+  .team-head h1 { font-size: clamp(34px, 6vw, 54px); }
+  .team-head h1 span { color: var(--accent-ink); }
+  .team-head .who { display: grid; gap: 6px; min-width: 0; flex: 1; }
+  label.season-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  #record .stat.wide { grid-column: span 2; }
+  #record .fig { white-space: nowrap; }
+
+  /* Next game */
+  .next {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 28px; align-items: center;
+    background: var(--band); color: var(--band-ink); text-decoration: none;
+    border-top: 6px solid var(--accent); padding: 22px 24px;
+  }
+  .next .eyebrow { color: var(--band-muted); }
+  .next .eyebrow b { color: var(--accent); }
+  .next .matchup { display: flex; align-items: center; gap: 14px; margin-top: 10px; min-width: 0; }
+  .disc { width: 58px; height: 58px; flex: none; border-radius: 50%; background: #fff; display: grid; place-items: center; padding: 7px; }
+  .disc img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .next .vs { font: 800 clamp(28px, 5vw, 46px)/.95 var(--font-display); text-transform: uppercase; min-width: 0; }
+  .next .vs small { display: block; font: 600 13px/1.4 var(--font-body); letter-spacing: .02em; text-transform: none; color: var(--band-muted); margin-top: 6px; }
+  .next .ha { color: var(--band-muted); font-weight: 500; margin-right: .2em; }
+  .next-side { display: grid; gap: 10px; justify-items: end; }
+  .countdown { display: flex; gap: 6px; }
+  .countdown span { display: grid; justify-items: center; gap: 4px; min-width: 60px; padding: 9px 6px 7px; background: var(--band-2); }
+  .countdown b { font: 700 32px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .countdown small { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--band-muted); }
+  .cta { font: 700 15px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .next:hover .cta { text-decoration: underline; text-underline-offset: 3px; }
+  .next .score { font: 800 56px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+
+  /* Game list */
+  .panel .tabs { align-items: center; }
+  .month { padding: 18px 16px 8px; font: 700 18px/1 var(--font-display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .game {
+    display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; gap: 16px; align-items: center;
+    padding: 12px 16px; border-top: 1px solid var(--line); color: inherit; text-decoration: none;
+  }
+  .game:hover { background: var(--hover); }
+  .game:hover .go { color: var(--accent-ink); }
+  .date { display: grid; justify-items: center; gap: 3px; line-height: 1; }
+  .date small { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .date b { font: 800 30px/1 var(--font-display); }
+  .opp { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .opp img { width: 36px; height: 36px; object-fit: contain; flex: none; }
+  .opp .txt { min-width: 0; display: grid; gap: 2px; }
+  .opp .nm { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opp .nm .ha { display: inline-block; width: 1.7em; color: var(--muted); font-weight: 500; }
+  .opp .venue { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side { display: grid; gap: 4px; justify-items: end; text-align: right; }
+  .side .time { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .go { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .live { display: inline-flex; align-items: center; gap: 6px; font: 800 13px/1 var(--font-display); letter-spacing: .1em; color: var(--bad); }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  @media (prefers-reduced-motion: no-preference) { .live::before { animation: pulse 1.4s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  @media (max-width: 600px) {
+    .next { grid-template-columns: 1fr; padding: 18px; }
+    .next-side { justify-items: start; }
+    .team-head { padding: 16px; }
+    .team-head img { width: 52px; height: 52px; }
+    .game { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 10px; padding: 12px; }
+    .date b { font-size: 26px; }
+    .opp img { width: 28px; height: 28px; }
+  }
+</style>
+
+<main class="widget" aria-live="polite">
+  <header class="team-head">
+    <img src="https://assets.leaguestat.com/acha/logos/509.png" alt="">
+    <div class="who">
+      <div class="eyebrow" id="eyebrow">Schedule &amp; results</div>
+      <h1>Oklahoma State <span>Cowboys</span></h1>
+    </div>
+    <label class="season-pick" for="season">Season
+      <select id="season" disabled><option>Loading…</option></select>
+    </label>
+  </header>
+
+  <div class="statline" id="record"><div class="placeholder">Loading the schedule from the ACHA…</div></div>
+
+  <div id="next"></div>
+
+  <section class="panel">
+    <div class="tabs" role="tablist" aria-label="Filter games">
+      <button class="tab" role="tab" id="f-all" data-filter="all" aria-selected="true">All games</button>
+      <button class="tab" role="tab" id="f-upcoming" data-filter="upcoming" aria-selected="false">Upcoming</button>
+      <button class="tab" role="tab" id="f-results" data-filter="results" aria-selected="false">Results</button>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <footer>
+    <span id="status"><span class="live-dot stale"></span>Connecting to ACHA stats…</span>
+    <button type="button" class="btn" id="refresh">Refresh</button>
+  </footer>
+</main>
+
+<script src="shared/acha.js"></script>
+<script>
+(() => {
+  const { feed, sections, esc, shortTeam, shortSeason, MONTHS } = ACHA;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  ACHA.applyView(params);
+
+  const TEAM = String(params.get('team') || ACHA.TEAM_ID);
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const TZ = { EST: '-05:00', EDT: '-04:00', CST: '-06:00', CDT: '-05:00', MST: '-07:00', MDT: '-06:00', PST: '-08:00', PDT: '-07:00', AKST: '-09:00', AKDT: '-08:00' };
+  const pad = n => String(n).padStart(2, '0');
+  const logoFor = id => `https://assets.leaguestat.com/acha/logos/${encodeURIComponent(id)}.png`;
+
+  let seasons = [], seasonId = params.get('season'), currentSeasonId = null, filter = ['upcoming', 'results'].includes(params.get('show')) ? params.get('show') : 'all';
+  let games = [], loadedAt = null, refreshTimer = null, loadToken = 0;
+
+  // ---------- Parsing ----------
+  function stateOf(status) {
+    const s = String(status || '');
+    if (/final/i.test(s)) return 'final';
+    if (/postpon|cancel/i.test(s)) return 'off';
+    if (!s.trim() || /\d{1,2}:\d{2}\s*(am|pm)/i.test(s) || /tb[ad]/i.test(s)) return 'upcoming';
+    return 'live';
+  }
+
+  function whenOf(row, season) {
+    const m = String(row.date_with_day || '').match(/^(\w{3}),\s*(\w{3})\s+(\d{1,2})/);
+    if (!m) return null;
+    const [, dow, mon, day] = m;
+    const mi = MONTHS.indexOf(mon);
+    const startYear = +(String(season.start_date || season.name || '').slice(0, 4)) || new Date().getFullYear();
+    const startMonth = season.start_date ? +season.start_date.slice(5, 7) - 1 : 7;
+    const year = mi < startMonth ? startYear + 1 : startYear;
+    const t = String(row.game_status || '').match(/(\d{1,2}):(\d{2})\s*(am|pm)\s*([A-Z]{2,4})?/i);
+    let date;
+    if (t) {
+      const h = (+t[1] % 12) + (/pm/i.test(t[3]) ? 12 : 0);
+      date = new Date(`${year}-${pad(mi + 1)}-${pad(day)}T${pad(h)}:${t[2]}:00${TZ[(t[4] || '').toUpperCase()] || '-06:00'}`);
+    } else date = new Date(year, mi, +day, 12);
+    return { date, dow, mon, day: +day, year, month: mi, time: t ? `${t[1]}:${t[2]} ${t[3].toLowerCase()}${t[4] ? ' ' + t[4].toUpperCase() : ''}` : '' };
+  }
+
+  function parseGame(r, season) {
+    const row = r.row, prop = r.prop || {};
+    const homeId = String(prop.home_team_city?.teamLink || ''), awayId = String(prop.visiting_team_city?.teamLink || '');
+    const home = homeId === TEAM;
+    const us = parseInt(home ? row.home_goal_count : row.visiting_goal_count, 10);
+    const them = parseInt(home ? row.visiting_goal_count : row.home_goal_count, 10);
+    const state = stateOf(row.game_status);
+    let result = null;
+    if (state === 'final' && !isNaN(us) && !isNaN(them)) {
+      const extra = /SO/i.test(row.game_status) ? 'SO' : /OT/i.test(row.game_status) ? 'OT' : '';
+      result = us > them ? { cls: 'w', tag: 'W', kind: 'W' } : { cls: extra ? 'otl' : 'l', tag: extra ? extra + 'L' : 'L', kind: 'L' };
+      result.score = `${us}–${them}${extra ? ' ' + extra : ''}`;
+    }
+    return {
+      id: String(row.game_id), home, oppId: home ? awayId : homeId,
+      opp: shortTeam(home ? row.visiting_team_city : row.home_team_city),
+      venue: row.venue_name || '', status: row.game_status || '', state, result, us, them,
+      when: whenOf(row, season),
+    };
+  }
+
+  // ---------- Load ----------
+  async function load() {
+    const token = ++loadToken;
+    ACHA.setStatus($('status'), 'loading', loadedAt);
+    try {
+      if (!seasons.length) {
+        const boot = await feed({ view: 'bootstrap', season: 'latest', pageName: 'scorebar' });
+        seasons = boot.seasons || [];
+        currentSeasonId = String(boot.current_season_id);
+        if (!seasonId) seasonId = currentSeasonId;
+      }
+      const sched = await feed({ view: 'schedule', team: TEAM, season: seasonId, month: '-1', location: 'homeaway' });
+      if (token !== loadToken) return;
+      const season = seasons.find(s => String(s.id) === String(seasonId)) || {};
+      games = (sections(sched)[0]?.data || []).map(r => parseGame(r, season));
+      loadedAt = new Date();
+      render(season);
+      ACHA.setStatus($('status'), 'ok', loadedAt);
+    } catch (err) {
+      if (token !== loadToken) return;
+      ACHA.setStatus($('status'), 'error', loadedAt, err.message);
+      if (!loadedAt) $('record').innerHTML = `<div class="placeholder">${esc(err.message)} Try Refresh in a minute.</div>`;
+    }
+    // Check often while a game is live or about to start, otherwise every 10 minutes
+    clearTimeout(refreshTimer);
+    const soon = games.some(g => g.state === 'live' || (g.state === 'upcoming' && g.when && Math.abs(g.when.date - Date.now()) < 3 * 3600e3));
+    refreshTimer = setTimeout(() => { if (document.visibilityState === 'visible') load(); else refreshTimer = setTimeout(load, 60e3); }, (soon ? 1 : 10) * 60e3);
+  }
+
+  // ---------- Render ----------
+  // Carry a past season into game links so "Full schedule" returns to it; the current season stays unpinned
+  const gameHref = g => 'game.html' + ACHA.carry(params, { game: g.id, from: 'schedule', season: String(seasonId) !== currentSeasonId ? seasonId : null });
+
+  function render(season) {
+    const sel = $('season');
+    const regular = seasons.filter(s => /^\d{4}-\d{2,4}\s+Men's/.test(s.name));
+    if (!regular.some(s => String(s.id) === String(seasonId)) && season.id) regular.unshift(season);
+    sel.innerHTML = regular.map(s => `<option value="${esc(s.id)}"${String(s.id) === String(seasonId) ? ' selected' : ''}>${esc(shortSeason(s.name))}</option>`).join('');
+    sel.disabled = false;
+    $('eyebrow').textContent = `${shortSeason(season.name) || 'Current'} schedule & results`;
+
+    renderRecord();
+    renderNext();
+    renderList();
+  }
+
+  function renderRecord() {
+    const finals = games.filter(g => g.result).sort((a, b) => a.when.date - b.when.date);
+    if (!games.length) { $('record').innerHTML = `<div class="placeholder">No games on the ACHA schedule for this season yet.</div>`; return; }
+    const count = (list, test) => list.filter(test).length;
+    const w = count(finals, g => g.result.kind === 'W'), l = count(finals, g => g.result.tag === 'L'), otl = count(finals, g => g.result.cls === 'otl');
+    const homeG = finals.filter(g => g.home), awayG = finals.filter(g => !g.home);
+    const rec = list => `${count(list, g => g.result.kind === 'W')}–${count(list, g => g.result.kind === 'L')}`;
+    let streak = '–';
+    if (finals.length) {
+      const last = finals[finals.length - 1].result.kind;
+      let n = 0;
+      for (let i = finals.length - 1; i >= 0 && finals[i].result.kind === last; i--) n++;
+      streak = last + n;
+    }
+    const gf = finals.reduce((s, g) => s + g.us, 0), ga = finals.reduce((s, g) => s + g.them, 0);
+    const cells = [
+      ['Record', `${w}–${l}–${otl}`, 'Wins–losses–overtime/shootout losses', true],
+      ['Home', rec(homeG), 'Home record'], ['Away', rec(awayG), 'Road record'],
+      ['Streak', streak, 'Current streak'], ['GF', gf, 'Goals for'], ['GA', ga, 'Goals against'],
+      ['Left', count(games, g => g.state === 'upcoming' || g.state === 'live'), 'Games remaining'],
+    ];
+    $('record').innerHTML = cells.map(([lbl, v, title, key]) => `<div class="stat${key ? ' key wide' : ''}" title="${esc(title)}"><span class="fig">${esc(v)}</span><span class="lbl">${esc(lbl)}</span></div>`).join('');
+  }
+
+  function renderNext() {
+    const next = games.find(g => g.state === 'live') || games.filter(g => g.state === 'upcoming').sort((a, b) => a.when.date - b.when.date)[0];
+    if (!next) { $('next').innerHTML = ''; return; }
+    const w = next.when;
+    const dateLine = w ? w.date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) : '';
+    const side = next.state === 'live'
+      ? `<span class="live">LIVE</span><span class="score">${esc(next.us)}–${esc(next.them)}</span><span class="cta">Follow live →</span>`
+      : `<div class="countdown" id="countdown"></div><span class="cta">Game preview →</span>`;
+    $('next').innerHTML = `<a class="next" href="${esc(gameHref(next))}">
+      <div>
+        <div class="eyebrow"><b>${next.state === 'live' ? 'Happening now' : 'Next game'}</b> · ${esc(dateLine)}${w?.time ? ' · ' + esc(w.time) : ''}</div>
+        <div class="matchup">
+          <span class="disc"><img src="${logoFor(TEAM)}" alt="Oklahoma State"></span>
+          <span class="disc"><img src="${logoFor(next.oppId)}" alt="${esc(next.opp)}" onerror="this.remove()"></span>
+          <div class="vs"><span class="ha">${next.home ? 'vs' : '@'}</span>${esc(next.opp)}<small>${esc(next.venue)}</small></div>
+        </div>
+      </div>
+      <div class="next-side">${side}</div>
+    </a>`;
+    tickCountdown(next);
+  }
+
+  let countdownTimer = null;
+  function tickCountdown(next) {
+    clearInterval(countdownTimer);
+    const el = () => $('countdown');
+    const draw = () => {
+      if (!el() || !next.when) return;
+      const ms = next.when.date - Date.now();
+      if (ms <= 0) { el().innerHTML = `<span><b>Soon</b><small>Puck drop</small></span>`; return; }
+      const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+      el().innerHTML = [[d, 'Days'], [h, 'Hrs'], [m, 'Min']].map(([v, l]) => `<span><b>${v}</b><small>${l}</small></span>`).join('');
+    };
+    draw();
+    countdownTimer = setInterval(draw, 30e3);
+  }
+
+  function renderList() {
+    for (const f of ['all', 'upcoming', 'results']) $('f-' + f).setAttribute('aria-selected', String(f === filter));
+    const shown = games
+      .filter(g => filter === 'all' || (filter === 'results' ? g.state === 'final' : g.state !== 'final'))
+      .sort((a, b) => (filter === 'results' ? b.when.date - a.when.date : a.when.date - b.when.date));
+    if (!shown.length) {
+      $('list').innerHTML = `<p class="empty">${filter === 'results' ? 'No results yet this season.' : filter === 'upcoming' ? 'No games left on the schedule.' : 'No games scheduled.'}</p>`;
+      return;
+    }
+    let lastMonth = '';
+    $('list').innerHTML = shown.map(g => {
+      const w = g.when || {};
+      const key = `${w.year}-${w.month}`;
+      const head = key !== lastMonth ? `<h2 class="month">${esc(MONTH_NAMES[w.month] || '')} ${esc(w.year || '')}</h2>` : '';
+      lastMonth = key;
+      let side;
+      if (g.state === 'final' && g.result) side = `<span class="result ${g.result.cls}"><i>${g.result.tag}</i>${esc(g.result.score)}</span><span class="go">Recap →</span>`;
+      else if (g.state === 'live') side = `<span class="live">LIVE</span><span class="time">${esc(g.us)}–${esc(g.them)}</span>`;
+      else if (g.state === 'off') side = `<span class="time">${esc(g.status)}</span>`;
+      else side = `<span class="time">${esc(w.time || 'TBA')}</span><span class="go">Preview →</span>`;
+      return `${head}<a class="game" href="${esc(gameHref(g))}">
+        <span class="date"><small>${esc(w.dow || '')}</small><b>${esc(w.day || '')}</b><small>${esc(w.mon || '')}</small></span>
+        <span class="opp"><img src="${logoFor(g.oppId)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+          <span class="txt"><span class="nm"><span class="ha">${g.home ? 'vs' : '@'}</span>${esc(g.opp)}</span><span class="venue">${esc(g.venue)}</span></span></span>
+        <span class="side">${side}</span>
+      </a>`;
+    }).join('');
+  }
+
+  // ---------- Events ----------
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-filter]');
+    if (!b) return;
+    filter = b.dataset.filter;
+    renderList();
+  });
+  $('season').addEventListener('change', e => { seasonId = e.target.value; load(); });
+  $('refresh').addEventListener('click', load);
+  load();
+})();
+</script>
