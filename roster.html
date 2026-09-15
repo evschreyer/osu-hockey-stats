@@ -1,0 +1,157 @@
+<!--
+  OSU Hockey — live team roster with season stats
+
+  GoDaddy embed (one section shows the whole team; tapping a player opens their stats):
+    <iframe src="https://YOUR-HOST/roster.html"
+            style="width:100%;height:2000px;border:0" loading="lazy"></iframe>
+
+  URL options: season, theme, accent, bg, refresh, team (same meanings as player.html)
+-->
+<title>Cowboys Roster Stats</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .team-head {
+    display: flex; align-items: center; gap: 18px;
+    background: var(--surface); border-top: 6px solid var(--ink); padding: 20px 24px;
+  }
+  .team-head img { width: 72px; height: 72px; object-fit: contain; flex: none; }
+  .team-head h1 { font-size: clamp(34px, 6vw, 54px); }
+  .team-head h1 span { color: var(--accent-ink); }
+  .team-head .who { display: grid; gap: 6px; min-width: 0; }
+
+  .group { display: grid; gap: 12px; }
+  .group h2 .count { color: var(--muted); font-weight: 500; margin-left: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+
+  .card {
+    position: relative; overflow: hidden;
+    display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 14px; align-items: center;
+    padding: 14px; background: var(--surface); color: inherit; text-decoration: none;
+    border-top: 3px solid var(--line);
+  }
+  .card:hover { border-top-color: var(--accent); }
+  .card:hover .num { -webkit-text-stroke-color: var(--accent); opacity: 1; }
+  .num {
+    position: absolute; right: 2px; top: -12px;
+    font: 900 78px/1 var(--font-display); color: transparent;
+    -webkit-text-stroke: 1.5px var(--accent); opacity: .75; pointer-events: none;
+  }
+  .face { grid-row: span 2; width: 64px; height: 64px; background: var(--hover); display: grid; place-items: center; overflow: hidden; border-bottom: 3px solid var(--accent); }
+  .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .face .initials { font-size: 24px; }
+  .nm { font: 800 24px/1 var(--font-display); text-transform: uppercase; padding-right: 64px; align-self: end; }
+  .nm small { display: block; font-weight: 500; font-size: 14px; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px; }
+  .meta { font-size: 12px; color: var(--muted); align-self: start; }
+  .rookie { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); margin-left: 6px; }
+  .line { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  .line span { display: grid; gap: 2px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .line b { font: 700 24px/1 var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .line .key b { color: var(--accent-ink); }
+
+  @media (max-width: 560px) { .team-head { padding: 16px; } .team-head img { width: 52px; height: 52px; } }
+</style>
+
+<main class="widget" aria-live="polite">
+  <header class="team-head">
+    <img id="logo" src="https://assets.leaguestat.com/acha/logos/509.png" alt="">
+    <div class="who">
+      <div class="eyebrow" id="eyebrow">Roster &amp; season stats</div>
+      <h1>Oklahoma State <span>Cowboys</span></h1>
+    </div>
+  </header>
+
+  <div id="groups"><p class="empty">Loading the roster from the ACHA…</p></div>
+
+  <footer>
+    <span id="status"><span class="live-dot stale"></span>Connecting to ACHA stats…</span>
+    <button type="button" class="btn" id="refresh">Refresh</button>
+  </footer>
+</main>
+
+<script src="shared/acha.js"></script>
+<script>
+(() => {
+  const { feed, sections, esc, shortTeam, shortSeason, fmtHeight, fmtStat, POSITIONS } = ACHA;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  ACHA.applyView(params);
+
+  const TEAM = params.get('team') || ACHA.TEAM_ID;
+  const refreshMinutes = params.has('refresh') ? Number(params.get('refresh')) : 10;
+  const GROUPS = { Forwards: 'Forwards', Defencemen: 'Defense', Defensemen: 'Defense', Goalies: 'Goalies' };
+  let seasonId = params.get('season');
+  let loadedAt = null;
+
+  const playersQuery = position => ({
+    view: 'players', season: seasonId, division: '-1', team: TEAM, position, rookies: '0', statsType: 'standard',
+    rosterstatus: 'undefined', first: '0', limit: '100', sort: position === 'goalies' ? 'gaa' : 'points',
+    ...(position === 'goalies' ? { qualified: 'all' } : {}),
+  });
+
+  async function load() {
+    ACHA.setStatus($('status'), 'loading', loadedAt);
+    try {
+      if (!seasonId) {
+        const boot = await feed({ view: 'bootstrap', season: 'latest', pageName: 'scorebar' });
+        seasonId = String(boot.current_season_id);
+      }
+      const [roster, skaters, goalies] = await Promise.all([
+        feed({ view: 'roster', team_id: TEAM, season_id: seasonId, rosterstatus: 'undefined' }),
+        feed(playersQuery('skaters')),
+        feed(playersQuery('goalies')),
+      ]);
+      const stats = new Map();
+      for (const r of [...(sections(skaters)[0]?.data || []), ...(sections(goalies)[0]?.data || [])]) stats.set(String(r.row.player_id), r.row);
+      render(roster, stats);
+      loadedAt = new Date();
+      ACHA.setStatus($('status'), 'ok', loadedAt);
+    } catch (err) {
+      ACHA.setStatus($('status'), 'error', loadedAt, err.message);
+      if (!loadedAt) $('groups').innerHTML = `<p class="empty">${esc(err.message)} Try Refresh in a minute.</p>`;
+    }
+  }
+
+  function card(r, stats) {
+    const id = String(r.player_id);
+    const goalie = r.position === 'G';
+    const s = stats.get(id) || {};
+    const gp = +(s.games_played || 0);
+    const parts = String(r.name || '').trim().split(/\s+/);
+    const first = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+    const last = parts[parts.length - 1] || '';
+    const cells = goalie
+      ? [['GP', fmtStat('games_played', s.games_played ?? 0)], ['W', fmtStat('wins', s.wins ?? 0)],
+         ['GAA', gp ? fmtStat('gaa', s.goals_against_average) : '–'], ['SV%', gp ? fmtStat('save_percentage', s.save_percentage) : '–']]
+      : [['GP', fmtStat('games_played', s.games_played ?? 0)], ['G', fmtStat('goals', s.goals ?? 0)],
+         ['A', fmtStat('assists', s.assists ?? 0)], ['PTS', fmtStat('points', s.points ?? 0)]];
+    const href = 'player.html' + ACHA.carry(params, { player: id, from: 'roster', season: params.get('season') });
+    const meta = [POSITIONS[r.position] || r.position, (r.shoots || r.catches) && `${goalie ? 'Catches' : 'Shoots'} ${r.shoots || r.catches}`, fmtHeight(r.height_hyphenated), r.w && `${r.w} lb`].filter(Boolean);
+    const initials = esc((first[0] || '') + (last[0] || ''));
+    return `<a class="card" href="${esc(href)}" aria-label="${esc(r.name)} stats">
+      <span class="num" aria-hidden="true">${esc(r.tp_jersey_number)}</span>
+      <span class="face"><img src="${ACHA.headshot(id)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<span class=&quot;initials&quot;>${initials}</span>'"></span>
+      <span class="nm"><small>${esc(first)}</small>${esc(last)}</span>
+      <span class="meta">${esc(meta.join(' · '))}${r.rookie === '1' ? '<span class="rookie">Rookie</span>' : ''}</span>
+      <span class="line">${cells.map(([l, v], i) => `<span${i === 3 ? ' class="key"' : ''}><b>${v}</b>${l}</span>`).join('')}</span>
+    </a>`;
+  }
+
+  function render(roster, stats) {
+    $('eyebrow').textContent = `${shortSeason(roster.seasonName) || 'Current'} roster · ${String(roster.divisionName || '').replace(/\s+Independent$/, '')}`;
+    if (roster.teamLogo) $('logo').src = roster.teamLogo;
+    const groups = sections(roster.roster).filter(s => GROUPS[s.title] && s.data?.length);
+    if (!groups.length) { $('groups').innerHTML = `<p class="empty">The ACHA hasn't posted a roster for this season yet.</p>`; return; }
+    $('groups').innerHTML = `<div class="widget" style="padding:0">${groups.map(g => {
+      const players = g.data.map(x => x.row).sort((a, b) => (+a.tp_jersey_number || 999) - (+b.tp_jersey_number || 999));
+      return `<section class="group"><h2>${GROUPS[g.title]}<span class="count">${players.length}</span></h2>
+        <div class="grid">${players.map(p => card(p, stats)).join('')}</div></section>`;
+    }).join('')}</div>`;
+  }
+
+  $('refresh').addEventListener('click', load);
+  if (refreshMinutes > 0) setInterval(() => { if (document.visibilityState === 'visible') load(); }, refreshMinutes * 60000);
+  load();
+})();
+</script>

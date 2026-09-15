@@ -1,0 +1,188 @@
+<!--
+  OSU Hockey — embed code helper (for the website team, not for the public site)
+  Loads the live ACHA roster and writes a GoDaddy HTML-section code for every player.
+-->
+<title>Cowboys Embed Codes</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .head { display: grid; gap: 8px; }
+  .head h1 { font-size: clamp(34px, 6vw, 52px); }
+  .head p { margin: 0; max-width: 65ch; color: var(--muted); }
+  .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; max-width: 70ch; }
+  .steps b { color: var(--ink); }
+
+  .settings {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px;
+    background: var(--surface); border-top: 3px solid var(--ink); padding: 18px;
+  }
+  .field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; align-content: start; }
+  .field.wide { grid-column: 1 / -1; }
+  .field input, .field select { width: 100%; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+
+  .block { background: var(--surface); padding: 16px; display: grid; gap: 10px; }
+  .block-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+  code.snippet {
+    display: block; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all; background: var(--hover);
+    padding: 8px 10px; border: 1px solid var(--line); color: var(--ink);
+  }
+  td.code { white-space: normal; min-width: 340px; width: 60%; }
+  td.actions { display: flex; gap: 6px; justify-content: flex-end; }
+  td.actions a { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 10px; font-size: 12px; font-weight: 600; }
+  .num { font: 700 20px/1 var(--font-display); }
+  .pos { color: var(--muted); }
+</style>
+
+<main class="widget">
+  <header class="head">
+    <div class="eyebrow">Website team tool · not for the public site</div>
+    <h1>Player embed codes</h1>
+    <p>Every player on the current ACHA roster gets a ready-to-paste code. The list reads the live roster, so new players show up here automatically.</p>
+    <ol class="steps">
+      <li><b>Host the <code>osu-hockey-stats</code> folder</b> (GitHub Pages or Cloudflare Pages) and paste its address below.</li>
+      <li><b>In GoDaddy</b>, open a player's profile page → Add Section → HTML → paste that player's code.</li>
+      <li><b>For a team page</b>, paste the whole-roster code instead. Tapping a player opens their stats inside the same box.</li>
+    </ol>
+  </header>
+
+  <form class="settings" id="settings" onsubmit="return false">
+    <label class="field wide" for="host">Hosted folder address
+      <input type="text" id="host" value="https://your-username.github.io/osu-hockey-stats/" spellcheck="false">
+      <span class="hint">The web address where player.html and roster.html live.</span>
+    </label>
+    <label class="field" for="theme">Theme
+      <select id="theme">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="">Match visitor's device</option>
+      </select>
+      <span class="hint">Pick the one that matches your GoDaddy theme.</span>
+    </label>
+    <label class="field" for="bg">Background
+      <select id="bg">
+        <option value="">Rink ice (widget color)</option>
+        <option value="transparent">Transparent (GoDaddy section shows)</option>
+      </select>
+    </label>
+    <label class="field" for="h-player">Player box height (px)
+      <input type="number" id="h-player" value="1300" min="400" step="50">
+    </label>
+    <label class="field" for="h-roster">Roster box height (px)
+      <input type="number" id="h-roster" value="2000" min="400" step="50">
+    </label>
+  </form>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>Whole roster</h2>
+      <span><a class="btn" id="roster-preview" href="roster.html" target="_blank" rel="noopener">Preview</a> <button type="button" class="btn" id="copy-roster">Copy</button></span>
+    </div>
+    <code class="snippet" id="roster-code"></code>
+  </section>
+
+  <section class="panel">
+    <div class="block-head" style="padding:16px 16px 0">
+      <h2 id="list-title">Players</h2>
+      <button type="button" class="btn" id="copy-all">Copy all player codes</button>
+    </div>
+    <div class="scroll" id="players"><p class="empty">Loading the roster from the ACHA…</p></div>
+  </section>
+
+  <footer><span id="status"><span class="live-dot stale"></span>Connecting to ACHA stats…</span></footer>
+</main>
+
+<script src="shared/acha.js"></script>
+<script>
+(() => {
+  const { feed, sections, esc, shortSeason, POSITIONS } = ACHA;
+  const $ = id => document.getElementById(id);
+  const FIELDS = ['host', 'theme', 'bg', 'h-player', 'h-roster'];
+  const STORE = 'osuEmbedSettings';
+  let players = [];
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+    for (const f of FIELDS) if (saved[f] !== undefined) $(f).value = saved[f];
+  } catch (_) {}
+
+  const settings = () => {
+    let host = $('host').value.trim();
+    if (host && !host.endsWith('/')) host += '/';
+    return { host, theme: $('theme').value, bg: $('bg').value, hPlayer: +$('h-player').value || 1300, hRoster: +$('h-roster').value || 2000 };
+  };
+  const query = (s, extra) => {
+    const q = new URLSearchParams(extra);
+    if (s.theme) q.set('theme', s.theme);
+    if (s.bg) q.set('bg', s.bg);
+    const str = q.toString();
+    return str ? '?' + str : '';
+  };
+  const iframe = (src, title, h) => `<iframe src="${src}" title="${title}" style="width:100%;height:${h}px;border:0" loading="lazy"></iframe>`;
+  const playerCode = (s, p) => iframe(`${s.host}player.html${query(s, { player: p.id })}`, `${p.name} stats`, s.hPlayer);
+
+  function render() {
+    const s = settings();
+    try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(FIELDS.map(f => [f, $(f).value])))); } catch (_) {}
+    $('roster-code').textContent = iframe(`${s.host}roster.html${query(s, {})}`, 'Oklahoma State Cowboys roster stats', s.hRoster);
+    $('roster-preview').href = 'roster.html' + query(s, {});
+    if (!players.length) return;
+    $('players').innerHTML = `<table>
+      <thead><tr><th class="l" scope="col">#</th><th class="l" scope="col">Player</th><th class="l" scope="col">ACHA ID</th><th class="l" scope="col">Embed code</th><th scope="col"><span hidden>Actions</span></th></tr></thead>
+      <tbody>${players.map((p, i) => `<tr>
+        <td class="l num">${esc(p.number)}</td>
+        <td class="l"><strong>${esc(p.name)}</strong><br><span class="pos">${esc(POSITIONS[p.position] || p.position)}</span></td>
+        <td class="l">${esc(p.id)}</td>
+        <td class="l code"><code class="snippet">${esc(playerCode(s, p))}</code></td>
+        <td><div class="actions" style="display:flex;gap:6px;justify-content:flex-end">
+          <a href="player.html${esc(query(s, { player: p.id }))}" target="_blank" rel="noopener" class="btn" style="text-decoration:none">Preview</a>
+          <button type="button" class="btn" data-copy="${i}">Copy</button>
+        </div></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  async function copy(text, btn) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    const was = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = was; }, 1500);
+  }
+
+  $('settings').addEventListener('input', render);
+  $('copy-roster').addEventListener('click', e => copy($('roster-code').textContent, e.currentTarget));
+  $('copy-all').addEventListener('click', e => {
+    const s = settings();
+    copy(players.map(p => `#${p.number} ${p.name}\n${playerCode(s, p)}`).join('\n\n'), e.currentTarget);
+  });
+  $('players').addEventListener('click', e => {
+    const btn = e.target.closest('[data-copy]');
+    if (btn) copy(playerCode(settings(), players[+btn.dataset.copy]), btn);
+  });
+
+  (async () => {
+    render();
+    try {
+      const boot = await feed({ view: 'bootstrap', season: 'latest', pageName: 'scorebar' });
+      const roster = await feed({ view: 'roster', team_id: ACHA.TEAM_ID, season_id: boot.current_season_id, rosterstatus: 'undefined' });
+      players = sections(roster.roster)
+        .filter(sec => /forward|defen|goalie/i.test(sec.title))
+        .flatMap(sec => sec.data.map(x => x.row))
+        .map(r => ({ id: String(r.player_id), name: r.name, number: r.tp_jersey_number, position: r.position }))
+        .sort((a, b) => (+a.number || 999) - (+b.number || 999));
+      $('list-title').textContent = `${shortSeason(roster.seasonName)} players · ${players.length}`;
+      render();
+      ACHA.setStatus($('status'), 'ok', new Date());
+    } catch (err) {
+      $('players').innerHTML = `<p class="empty">${esc(err.message)} Reload the page to try again.</p>`;
+      ACHA.setStatus($('status'), 'error', null, err.message);
+    }
+  })();
+})();
+</script>

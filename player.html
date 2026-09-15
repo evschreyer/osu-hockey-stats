@@ -1,0 +1,334 @@
+<!--
+  OSU Hockey — live ACHA player stats
+
+  GoDaddy embed (use embed-codes.html to generate these for every player):
+    <iframe src="https://YOUR-HOST/player.html?player=33720"
+            style="width:100%;height:1300px;border:0" loading="lazy"></iframe>
+
+  URL options
+    player   ACHA player id (required)
+    season   ACHA season id (omit to follow the current season automatically)
+    tab      log | career   — which tab opens first
+    theme    light | dark   — omit to follow the visitor's system setting
+    accent   hex without #  — e.g. accent=FF7300
+    bg       transparent    — let the GoDaddy section background show through
+    refresh  minutes between automatic refreshes (0 turns it off, default 5)
+    team     ACHA team id used to label opponents/results (default 509)
+    from     roster         — shows a "Full roster" link back to roster.html
+-->
+<title>Cowboys Player Stats</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .back { justify-self: start; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--ink); }
+
+  .nameplate {
+    position: relative; overflow: hidden;
+    background: var(--surface); border-top: 6px solid var(--ink);
+    padding: 24px; display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: end;
+  }
+  .jersey {
+    position: absolute; right: -6px; bottom: -38px;
+    font: 900 clamp(150px, 26vw, 250px)/1 var(--font-display);
+    color: transparent; -webkit-text-stroke: 3px var(--accent);
+    letter-spacing: -0.02em; pointer-events: none; user-select: none;
+  }
+  .headshot {
+    position: relative; width: 128px; aspect-ratio: 1; max-width: 100%;
+    background: var(--hover); border-bottom: 4px solid var(--accent);
+    display: grid; place-items: center; overflow: hidden;
+  }
+  .headshot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .who { position: relative; display: grid; gap: 6px; min-width: 0; }
+  h1 .first { display: block; font-weight: 500; font-size: .55em; letter-spacing: .04em; color: var(--muted); }
+  .bio { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 0; font-size: 14px; }
+  .bio dt { display: inline; color: var(--muted); margin-right: 5px; }
+  .bio dd { display: inline; margin: 0; font-weight: 600; }
+
+  .season-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  label.season-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+
+  .scroll.log { max-height: 560px; overflow-y: auto; }
+  .opp { font-weight: 600; }
+  .opp .ha { display: inline-block; width: 1.9em; color: var(--muted); font-weight: 500; }
+  td.dec { font-weight: 700; }
+  .ptsbar { display: inline-grid; grid-template-columns: 56px 1.4em; align-items: center; gap: 8px; justify-content: end; }
+  .ptsbar span { display: block; height: 8px; background: color-mix(in srgb, var(--accent) 22%, transparent); position: relative; }
+  .ptsbar span b { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+
+  @media (max-width: 560px) {
+    .nameplate { grid-template-columns: 1fr; padding: 18px; gap: 16px; }
+    .headshot { width: 96px; }
+    .jersey { font-size: 150px; bottom: auto; top: -18px; }
+  }
+</style>
+
+<main class="widget" aria-live="polite">
+  <a class="back" id="back" href="roster.html" hidden>← Full roster</a>
+
+  <section class="nameplate">
+    <div class="jersey" id="jersey" aria-hidden="true"></div>
+    <div class="headshot" id="headshot"><span class="initials">OSU</span></div>
+    <div class="who">
+      <div class="eyebrow" id="eyebrow">Oklahoma State Cowboys</div>
+      <h1 id="name">Loading player…</h1>
+      <dl class="bio" id="bio"></dl>
+    </div>
+  </section>
+
+  <section>
+    <div class="season-bar">
+      <h2 id="season-title">Season</h2>
+      <label class="season-pick" for="season">Season
+        <select id="season" disabled><option>Loading…</option></select>
+      </label>
+    </div>
+    <div class="statline" id="statline"><div class="placeholder">Loading stats from the ACHA…</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-log" aria-controls="panel-log" aria-selected="true">Game log</button>
+      <button class="tab" role="tab" id="tab-career" aria-controls="panel-career" aria-selected="false">Career</button>
+    </div>
+    <div id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="scroll log"></div>
+    <div id="panel-career" role="tabpanel" aria-labelledby="tab-career" class="scroll" hidden></div>
+  </section>
+
+  <footer>
+    <span id="status"><span class="live-dot stale"></span>Connecting to ACHA stats…</span>
+    <span>
+      <a id="acha-link" href="https://www.achahockey.org/stats/" target="_blank" rel="noopener">View on ACHA</a>
+      &nbsp;
+      <button type="button" class="btn" id="refresh">Refresh</button>
+    </span>
+  </footer>
+</main>
+
+<script src="shared/acha.js"></script>
+<script>
+(() => {
+  const { feed, sections, esc, shortTeam, shortSeason, fmtDate, fmtHeight, fmtStat, label, MONTHS, POSITIONS, SITE } = ACHA;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  ACHA.applyView(params);
+
+  const CONFIG = {
+    playerId: params.get('player') || '33720',
+    teamId: params.get('team') || ACHA.TEAM_ID,
+    seasonId: params.get('season') || null,
+    tab: params.get('tab') === 'career' ? 'career' : 'log',
+    refreshMinutes: params.has('refresh') ? Number(params.get('refresh')) : 5,
+  };
+  if (params.get('from') === 'roster') {
+    $('back').href = 'roster.html' + ACHA.carry(params, { season: params.get('season') });
+    $('back').hidden = false;
+  }
+
+  // Columns the feed sends that this league doesn't track (or that we show another way)
+  const SKIP = new Set(['season_name', 'team_name', 'game', 'date_played', 'game_id', 'shots', 'gt', 'tie', 'ties',
+    'shootout_goals', 'shootout_attempts', 'shootout_winning_goals', 'shootout_percentage', 'total_losses', 'seconds_played']);
+  const ORDER = {
+    skater: ['games_played', 'goals', 'assists', 'points', 'points_per_game', 'power_play_goals', 'short_handed_goals', 'game_winning_goals', 'penalty_minutes'],
+    goalie: ['games_played', 'wins', 'losses', 'ot_losses', 'shootout_losses', 'goals_against_average', 'savepct', 'shutouts', 'shots_against', 'saves', 'goals_against', 'minutes_played'],
+  };
+  const KEY_STAT = { skater: 'points', goalie: 'savepct' };
+  const GOALIE_LOG = ['decision', 'minutes', 'shots_against', 'saves', 'goals_against', 'svpct', 'shutout'];
+  const ONLY_IF_USED = new Set(['shootout_losses', 'shootout_loss']);
+
+  let state = { player: null, schedule: new Map(), seasonId: CONFIG.seasonId, loadedAt: null };
+  const typeOf = d => (d?.info?.playerType === 'goalie' ? 'goalie' : 'skater');
+  const seasonName = d => (d.seasons || []).find(s => String(s.id) === state.seasonId)?.name || '';
+
+  function pickKeys(preferred, headers, rows) {
+    const inData = k => rows.some(r => r[k] !== undefined);
+    const extra = Object.keys(headers || {}).filter(k => !preferred.includes(k) && !SKIP.has(k) && !headers[k]?.properties?.hidden);
+    return preferred.concat(extra).filter(inData).filter(k => !ONLY_IF_USED.has(k) || rows.some(r => +r[k] > 0));
+  }
+  function th(key, headers) {
+    const l = label(key);
+    const text = l ? l[0] : (headers?.[key]?.properties?.label || key);
+    return `<th scope="col">${l ? `<abbr title="${esc(l[1])}">${esc(text)}</abbr>` : esc(text)}</th>`;
+  }
+
+  // ---------- Load ----------
+  async function load(seasonId) {
+    ACHA.setStatus($('status'), 'loading', state.loadedAt);
+    try {
+      const q = { view: 'player', player_id: CONFIG.playerId, statsType: 'standard' };
+      if (seasonId) q.season_id = seasonId;
+      const player = await feed(q);
+      if (!player || !player.info) throw new Error(`The ACHA has no player with id ${CONFIG.playerId}.`);
+      const sid = String(player.seasonId || seasonId || '');
+      const schedule = new Map();
+      try {
+        const sched = await feed({ view: 'schedule', team: CONFIG.teamId, season: sid, month: '-1', location: 'homeaway' });
+        for (const r of sections(sched)[0]?.data || []) schedule.set(String(r.row.game_id), r);
+      } catch (_) { /* game log still renders with ACHA team codes */ }
+      state = { player, schedule, seasonId: sid, loadedAt: new Date() };
+      render();
+      ACHA.setStatus($('status'), 'ok', state.loadedAt);
+    } catch (err) {
+      ACHA.setStatus($('status'), 'error', state.loadedAt, err.message);
+      if (!state.player) $('statline').innerHTML = `<div class="placeholder">${esc(err.message)} Try Refresh in a minute.</div>`;
+    }
+  }
+
+  // ---------- Render ----------
+  function render() {
+    const d = state.player, info = d.info;
+    const name = `${info.firstName} ${info.lastName}`;
+    document.title = `${name} · Cowboys Player Stats`;
+
+    $('jersey').textContent = info.jerseyNumber || '';
+    const division = (info.division || '').replace(/\s+Independent$/, '');
+    $('eyebrow').innerHTML = `${info.jerseyNumber ? `<b>#${esc(info.jerseyNumber)}</b> · ` : ''}${esc(shortTeam(info.teamName) || 'Oklahoma State')} ${esc(info.nickName || ACHA.TEAM_NICKNAME)}${division ? ' · ' + esc(division) : ''}`;
+    $('name').innerHTML = `<span class="first">${esc(info.firstName)}</span>${esc(info.lastName)}`;
+
+    const hs = $('headshot');
+    const initials = `<span class="initials">${esc((info.firstName?.[0] || '') + (info.lastName?.[0] || ''))}</span>`;
+    if (info.profileImage) {
+      hs.innerHTML = `<img src="${esc(info.profileImage)}" alt="${esc(name)}" width="240" height="240">`;
+      hs.querySelector('img').onerror = () => { hs.innerHTML = initials; };
+    } else hs.innerHTML = initials;
+
+    const born = info.birthDate ? (([y, m, dd]) => `${MONTHS[+m - 1]} ${+dd}, ${y}`)(info.birthDate.split('-')) : '';
+    const bio = [
+      ['Position', POSITIONS[info.position] || info.position],
+      [typeOf(d) === 'goalie' ? 'Catches' : 'Shoots', info.shoots || info.catches],
+      ['Height', fmtHeight(info.height)],
+      ['Weight', info.weight && info.weight + ' lb'],
+      ['Born', born],
+    ].filter(([, v]) => v);
+    $('bio').innerHTML = bio.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+    $('acha-link').href = `${SITE}/player/${encodeURIComponent(CONFIG.playerId)}`;
+
+    const sel = $('season');
+    sel.innerHTML = (d.seasons || []).map(s => `<option value="${esc(s.id)}"${String(s.id) === state.seasonId ? ' selected' : ''}>${esc(shortSeason(s.name))}</option>`).join('');
+    sel.disabled = !(d.seasons || []).length;
+    const sName = seasonName(d);
+    $('season-title').textContent = sName ? `${shortSeason(sName)}` + (/nationals|regionals/i.test(sName) ? '' : ' season') : 'Season';
+
+    renderStatline(d);
+    renderLog(d);
+    renderCareer(d);
+  }
+
+  // The stat line reads the career row for the selected season, so it follows the season picker
+  function renderStatline(d) {
+    const type = typeOf(d), name = seasonName(d);
+    let found = null;
+    for (const sec of sections(d.careerStats)) {
+      const hit = (sec.data || []).find(r => r.row.season_name === name);
+      if (hit) { found = { headers: sec.headers, row: { ...hit.row } }; break; }
+    }
+    const gp = +(found?.row.games_played || 0);
+    if (!found || !gp) {
+      $('statline').innerHTML = `<div class="placeholder">No games played in ${esc(shortSeason(name) || 'this season')} yet. Stats appear here after each game is final.</div>`;
+      return;
+    }
+    if (type === 'skater' && found.row.points_per_game === undefined) found.row.points_per_game = (+found.row.points / gp).toFixed(2);
+    const keys = pickKeys(ORDER[type], found.headers, [found.row]);
+    $('statline').innerHTML = keys.map(k => {
+      const l = label(k);
+      return `<div class="stat${k === KEY_STAT[type] ? ' key' : ''}"${l ? ` title="${esc(l[1])}"` : ''}>
+        <span class="fig">${fmtStat(k, found.row[k])}</span>
+        <span class="lbl">${esc(l ? l[0] : found.headers[k]?.properties?.label || k)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function opponentFor(gameRow) {
+    const gameId = String(gameRow.prop?.game?.gameLink || '');
+    const s = state.schedule.get(gameId);
+    if (!s) return { gameId, home: null, name: gameRow.row.game || '', result: null };
+    const home = String(s.prop?.home_team_city?.teamLink) === String(CONFIG.teamId);
+    const ours = parseInt(home ? s.row.home_goal_count : s.row.visiting_goal_count, 10);
+    const theirs = parseInt(home ? s.row.visiting_goal_count : s.row.home_goal_count, 10);
+    let result = null;
+    if (/final/i.test(s.row.game_status) && !isNaN(ours) && !isNaN(theirs)) {
+      const lossTag = /SO/i.test(s.row.game_status) ? 'SOL' : /OT/i.test(s.row.game_status) ? 'OTL' : 'L';
+      result = ours > theirs ? { cls: 'w', tag: 'W' } : { cls: lossTag === 'L' ? 'l' : 'otl', tag: lossTag };
+      result.score = `${ours}–${theirs}`;
+    }
+    return { gameId, home, name: shortTeam(home ? s.row.visiting_team_city : s.row.home_team_city), result };
+  }
+
+  const decisionOf = r => (+r.win ? 'W' : +r.loss ? 'L' : +r.ot_loss ? 'OTL' : +r.shootout_loss ? 'SOL' : 'ND');
+
+  function renderLog(d) {
+    const type = typeOf(d);
+    const sec = sections(d.gameByGame)[0];
+    const rows = sec?.data || [];
+    if (!rows.length) {
+      $('panel-log').innerHTML = `<p class="empty">No games played in ${esc(shortSeason(seasonName(d)) || 'this season')} yet. Each game appears here once it's final.</p>`;
+      return;
+    }
+    const data = rows.map(r => (type === 'goalie' ? { ...r.row, decision: decisionOf(r.row) } : r.row));
+    const keys = type === 'goalie' ? GOALIE_LOG.filter(k => k === 'decision' || data.some(r => r[k] !== undefined)) : pickKeys([], sec.headers, data);
+    const totals = { ...(d.gameByGameTotals || {}) };
+    if (type === 'goalie') totals.decision = `${totals.win ?? 0}–${totals.loss ?? 0}–${(+totals.ot_loss || 0) + (+totals.shootout_loss || 0)}`;
+    const maxPts = Math.max(1, ...data.map(r => +r.points || 0));
+
+    const cell = (k, r) => {
+      if (type === 'skater' && k === 'points') {
+        return `<td class="key"><span class="ptsbar"><span><b style="width:${((+r.points || 0) / maxPts * 100).toFixed(1)}%"></b></span>${esc(r.points)}</span></td>`;
+      }
+      if (k === 'decision') return `<td class="dec">${esc(r.decision)}</td>`;
+      return `<td${k === 'svpct' ? ' class="key"' : ''}>${fmtStat(k, r[k])}</td>`;
+    };
+
+    $('panel-log').innerHTML = `<table>
+      <thead><tr><th class="l" scope="col">Date</th><th class="l" scope="col">Opponent</th><th class="l" scope="col">Result</th>${keys.map(k => th(k, sec.headers)).join('')}</tr></thead>
+      <tbody>${rows.map((r, i) => [r, data[i]]).reverse().map(([r, row]) => {
+        const o = opponentFor(r);
+        const nameHtml = o.gameId ? `<a href="${SITE}/game-center/${encodeURIComponent(o.gameId)}" target="_blank" rel="noopener">${esc(o.name)}</a>` : esc(o.name);
+        const oppHtml = o.home === null ? nameHtml : `<span class="ha">${o.home ? 'vs' : '@'}</span>${nameHtml}`;
+        const res = o.result ? `<span class="result ${o.result.cls}"><i>${o.result.tag}</i>${o.result.score}</span>` : '<span class="result">–</span>';
+        return `<tr><td class="l">${fmtDate(row.date_played)}</td><td class="l opp">${oppHtml}</td><td class="l">${res}</td>${keys.map(k => cell(k, row)).join('')}</tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr><td class="l" colspan="3">${esc(totals.games_played ?? rows.length)} games</td>${keys.map(k => `<td${k === KEY_STAT[type] || k === 'svpct' ? ' class="key"' : ''}>${k === 'decision' ? esc(totals.decision) : fmtStat(k, totals[k])}</td>`).join('')}</tr></tfoot>
+    </table>`;
+  }
+
+  function renderCareer(d) {
+    const type = typeOf(d);
+    const html = sections(d.careerStats).map(sec => {
+      const body = (sec.data || []).map(r => r.row).filter(r => r.season_name !== 'Total' && +r.games_played > 0);
+      if (!body.length) return '';
+      const total = (sec.data || []).map(r => r.row).find(r => r.season_name === 'Total');
+      const keys = pickKeys(ORDER[type], sec.headers, body);
+      const showTeam = new Set(body.map(r => r.team_name)).size > 1;
+      const title = /playoff/i.test(sec.title) ? 'Postseason & Nationals' : sec.title;
+      const td = (k, r) => `<td${k === KEY_STAT[type] ? ' class="key"' : ''}>${fmtStat(k, r[k])}</td>`;
+      return `<table>
+        <caption class="caption">${esc(title)}</caption>
+        <thead><tr><th class="l" scope="col">Season</th>${showTeam ? '<th class="l" scope="col">Team</th>' : ''}${keys.map(k => th(k, sec.headers)).join('')}</tr></thead>
+        <tbody>${body.map(r => `<tr><td class="l">${esc(shortSeason(r.season_name))}</td>${showTeam ? `<td class="l">${esc(shortTeam(r.team_name))}</td>` : ''}${keys.map(k => td(k, r)).join('')}</tr>`).join('')}</tbody>
+        ${total && body.length > 1 ? `<tfoot><tr><td class="l"${showTeam ? ' colspan="2"' : ''}>Total</td>${keys.map(k => td(k, total)).join('')}</tr></tfoot>` : ''}
+      </table>`;
+    }).join('');
+    $('panel-career').innerHTML = html || `<p class="empty">No career games on file yet.</p>`;
+  }
+
+  // ---------- Events ----------
+  function selectTab(which) {
+    for (const t of ['log', 'career']) {
+      $('tab-' + t).setAttribute('aria-selected', String(t === which));
+      $('panel-' + t).hidden = t !== which;
+    }
+  }
+  $('tab-log').addEventListener('click', () => selectTab('log'));
+  $('tab-career').addEventListener('click', () => selectTab('career'));
+  $('season').addEventListener('change', e => load(e.target.value));
+  $('refresh').addEventListener('click', () => load(state.seasonId || CONFIG.seasonId));
+  selectTab(CONFIG.tab);
+
+  if (CONFIG.refreshMinutes > 0) {
+    setInterval(() => { if (document.visibilityState === 'visible') load(state.seasonId || CONFIG.seasonId); }, CONFIG.refreshMinutes * 60000);
+  }
+  load(CONFIG.seasonId);
+})();
+</script>
