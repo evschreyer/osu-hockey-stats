@@ -117,8 +117,64 @@
     setInterval(send, 1500);            // backup in case a resize notification is missed
   }
 
+  /* ---------------------------------------------------------------------
+     MANUAL SCHEDULE CHANGES
+     Use this when a game is moved but the ACHA site hasn't been updated yet.
+     Add an entry keyed by the ACHA game id (the number in the game page link).
+
+     `achaShows` is what the ACHA feed says right now. The change below is used
+     ONLY while the feed still says that, so as soon as the ACHA posts the new
+     date — or the game starts — the pages go back to the ACHA's own data on
+     their own. An entry left in here can't outlive the problem, but delete
+     old entries anyway to keep this tidy.
+     --------------------------------------------------------------------- */
+  const GAME_CHANGES = {
+    // Illinois road trip moved up a day. Told to us Nov 12, 2026; ACHA still lists Fri/Sat.
+    '32178': {
+      achaShows: { date: 'Fri, Nov 13', time: '7:00 pm CST', iso: '2026-11-13T19:00:00-06:00' },
+      date: 'Thu, Nov 12',
+      time: '9:30 pm CST',
+      iso: '2026-11-12T21:30:00-06:00',
+      note: 'Moved up from Fri, Nov 13',
+    },
+    '32179': {
+      achaShows: { date: 'Sat, Nov 14', time: '7:00 pm CST', iso: '2026-11-14T19:00:00-06:00' },
+      date: 'Fri, Nov 13',
+      time: '7:00 pm CST',
+      iso: '2026-11-13T19:00:00-06:00',
+      note: 'Moved up from Sat, Nov 14',
+    },
+  };
+
+  const sameText = (a, b) => String(a ?? '').trim().toLowerCase().replace(/\s+/g, ' ') === String(b ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // Schedule page: swap the date/time on a listing the ACHA hasn't corrected yet
+  function applyScheduleChange(row) {
+    const c = GAME_CHANGES[String(row.game_id)];
+    if (!c) return row;
+    if (!sameText(row.date_with_day, c.achaShows.date) || !sameText(row.game_status, c.achaShows.time)) return row;
+    return { ...row, date_with_day: c.date, game_status: c.time, changeNote: c.note };
+  }
+
+  // Game page: same swap on the game's own details block
+  function applyGameChange(details) {
+    if (!details) return details;
+    const c = GAME_CHANGES[String(details.id)];
+    if (!c || details.GameDateISO8601 !== c.achaShows.iso) return details;
+    if (String(details.started) === '1' || String(details.final) === '1') return details;
+    const when = new Date(c.iso);
+    return {
+      ...details,
+      GameDateISO8601: c.iso,
+      date: when.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      status: c.time,
+      changeNote: c.note,
+    };
+  }
+
   window.ACHA = {
     TEAM_ID, TEAM_NICKNAME, SITE, MONTHS, POSITIONS, LABELS,
     feed, sections, esc, shortTeam, shortSeason, fmtDate, fmtHeight, fmtStat, label, applyView, carry, setStatus, headshot,
+    applyScheduleChange, applyGameChange,
   };
 })();

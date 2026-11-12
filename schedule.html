@@ -71,6 +71,8 @@
   .opp .nm { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .opp .nm .ha { display: inline-block; width: 1.7em; color: var(--muted); font-weight: 500; }
   .opp .venue { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .changed { font-size: 12px; font-weight: 600; color: var(--accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .next .changed { color: var(--accent); font-style: normal; }
   .side { display: grid; gap: 4px; justify-items: end; text-align: right; }
   .side .time { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .go { font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -165,7 +167,7 @@
   }
 
   function parseGame(r, season) {
-    const row = r.row, prop = r.prop || {};
+    const row = ACHA.applyScheduleChange(r.row), prop = r.prop || {};
     const homeId = String(prop.home_team_city?.teamLink || ''), awayId = String(prop.visiting_team_city?.teamLink || '');
     const home = homeId === TEAM;
     const us = parseInt(home ? row.home_goal_count : row.visiting_goal_count, 10);
@@ -181,7 +183,7 @@
       id: String(row.game_id), home, oppId: home ? awayId : homeId,
       opp: shortTeam(home ? row.visiting_team_city : row.home_team_city),
       venue: row.venue_name || '', status: row.game_status || '', state, result, us, them,
-      when: whenOf(row, season),
+      note: row.changeNote || '', when: whenOf(row, season),
     };
   }
 
@@ -265,7 +267,7 @@
       : `<div class="countdown" id="countdown"></div><span class="cta">Game preview →</span>`;
     $('next').innerHTML = `<a class="next" href="${esc(gameHref(next))}">
       <div>
-        <div class="eyebrow"><b>${next.state === 'live' ? 'Happening now' : 'Next game'}</b> · ${esc(dateLine)}${w?.time ? ' · ' + esc(w.time) : ''}</div>
+        <div class="eyebrow"><b>${next.state === 'live' ? 'Happening now' : 'Next game'}</b> · ${esc(dateLine)}${w?.time ? ' · ' + esc(w.time) : ''}${next.note ? ` · <em class="changed">${esc(next.note)}</em>` : ''}</div>
         <div class="matchup">
           <span class="disc"><img src="${logoFor(TEAM)}" alt="Oklahoma State"></span>
           <span class="disc"><img src="${logoFor(next.oppId)}" alt="${esc(next.opp)}" onerror="this.remove()"></span>
@@ -315,7 +317,7 @@
       return `${head}<a class="game" href="${esc(gameHref(g))}">
         <span class="date"><small>${esc(w.dow || '')}</small><b>${esc(w.day || '')}</b><small>${esc(w.mon || '')}</small></span>
         <span class="opp"><img src="${logoFor(g.oppId)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-          <span class="txt"><span class="nm"><span class="ha">${g.home ? 'vs' : '@'}</span>${esc(g.opp)}</span><span class="venue">${esc(g.venue)}</span></span></span>
+          <span class="txt"><span class="nm"><span class="ha">${g.home ? 'vs' : '@'}</span>${esc(g.opp)}</span><span class="venue">${esc(g.venue)}</span>${g.note ? `<span class="changed">${esc(g.note)}</span>` : ''}</span></span>
         <span class="side">${side}</span>
       </a>`;
     }).join('');
